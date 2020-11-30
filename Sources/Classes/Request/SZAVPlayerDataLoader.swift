@@ -146,17 +146,15 @@ extension SZAVPlayerDataLoader: SZAVPlayerRequestOperationDelegate {
     }
 
     func requestOperation(_ operation: SZAVPlayerRequestOperation, didCompleteWithError error: Error?) {
-        var shouldSaveData = false
         callbackQueue.sync {
             if let error = error {
                 delegate?.dataLoader(self, didFailWithError: error)
             } else {
                 delegate?.dataLoaderDidFinish(self)
-                shouldSaveData = true
             }
         }
 
-        if shouldSaveData, let mediaData = mediaData, mediaData.count > 0 {
+        if let mediaData = mediaData, mediaData.count > 0 {
             SZAVPlayerCache.shared.save(uniqueID: uniqueID, mediaData: mediaData, startOffset: operation.startOffset)
             self.mediaData = nil
         }
