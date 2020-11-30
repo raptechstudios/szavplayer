@@ -34,7 +34,7 @@ public class SZAVPlayerAssetLoader: NSObject {
     private var isCancelled: Bool = false
     private var loadedLength: Int64 = 0
 
-    init(url: URL) {
+    public init(url: URL) {
         self.url = url
         super.init()
     }
