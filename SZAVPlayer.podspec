@@ -38,5 +38,6 @@ Pod::Spec.new do |s|
   # }
 
   # s.public_header_files = 'Pod/Classes/**/*.h'
+  s.dependency 'ReactiveSwift'
   s.frameworks = 'UIKit', 'CoreServices', 'AVFoundation'
 end
