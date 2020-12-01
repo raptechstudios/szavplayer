@@ -39,6 +39,7 @@ class SZAVPlayerContentInfoRequest: SZAVPlayerRequest {
     func cancel() {
         task.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("informationRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }
@@ -69,6 +70,7 @@ class SZAVPlayerDataRequest: SZAVPlayerRequest {
     func cancel() {
         loader.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("dataRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }
@@ -92,6 +94,7 @@ class SZAVPlayerLocalFileRequest: SZAVPlayerRequest {
 
     func cancel() {
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("LocalFileRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }

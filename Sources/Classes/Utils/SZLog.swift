@@ -125,6 +125,6 @@ class SZLogFormatter: NSObject {
         
         let dateStr = dateFormatter.string(from: Date())
         let finalMessage = String(format: "%@ | %@ %@", logLevelStr, dateStr, logMessage)
-        print(finalMessage)
+//        print(finalMessage)
     }
 }

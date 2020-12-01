@@ -56,6 +56,9 @@ class SZAVPlayerDataLoader: NSObject {
             return
         }
 
+        let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
+        print("stored local ranges: \(ranges)")
+        
         var startOffset = requestedRange.lowerBound
         let endOffset = requestedRange.upperBound
         for fileInfo in localFileInfos {
@@ -173,6 +176,7 @@ private extension SZAVPlayerDataLoader {
         let localFileStartOffset = max(0, startOffset - fileInfo.startOffset)
         let localFileUsefulLength = min(fileInfo.loadedByteLength - localFileStartOffset, requestedLength)
         let localFileRequestRange = localFileStartOffset..<localFileStartOffset + localFileUsefulLength
+        print("addLocalRequest \(localFileStartOffset + fileInfo.startOffset ..< localFileStartOffset + fileInfo.startOffset + localFileUsefulLength)")
         operationQueue.addOperation(localFileOperation(range: localFileRequestRange, fileInfo: fileInfo))
 
         startOffset = startOffset + localFileUsefulLength
@@ -186,6 +190,7 @@ private extension SZAVPlayerDataLoader {
     }
 
     func addRemoteRequest(range: SZAVPlayerRange) {
+        print("addRemoteRequest \(range)")
         let operation = remoteRequestOperation(range: range)
         operationQueue.addOperation(operation)
     }
