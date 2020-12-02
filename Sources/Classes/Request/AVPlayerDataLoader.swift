@@ -117,7 +117,7 @@ extension AVPlayerDataLoader {
         let localFileRequestRange = localFileStartOffset..<localFileStartOffset + localFileUsefulLength
         print("addLocalRequest \(localFileStartOffset + fileInfo.startOffset ..< localFileStartOffset + fileInfo.startOffset + localFileUsefulLength)")
 
-        startOffset = startOffset + localFileUsefulLength
+        startOffset = localFileStartOffset + fileInfo.startOffset + localFileUsefulLength
         return localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
     }
     
