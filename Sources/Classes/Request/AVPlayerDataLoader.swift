@@ -19,7 +19,6 @@ class AVPlayerDataLoader: NSObject {
     public weak var delegate: AVPlayerDataLoaderDelegate?
 
     private let callbackQueue: DispatchQueue
-    private let operationQueue: OperationQueue
     private let uniqueID: String
     private let url: URL
     private let requestedRange: SZAVPlayerRange
@@ -27,17 +26,13 @@ class AVPlayerDataLoader: NSObject {
     
     private var cancelled: Bool = false
     private var failed: Bool = false
-
+    var disposable: Disposable?
+    
     init(uniqueID: String, url: URL, range: SZAVPlayerRange, callbackQueue: DispatchQueue) {
         self.uniqueID = uniqueID
         self.url = url
         self.requestedRange = range
         self.callbackQueue = callbackQueue
-        self.operationQueue = {
-            let queue = OperationQueue()
-            queue.maxConcurrentOperationCount = 1
-            return queue
-        }()
         super.init()
     }
 
@@ -48,40 +43,55 @@ class AVPlayerDataLoader: NSObject {
     public func start() {
         guard !cancelled && !failed else { return }
 
-        let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
-        guard localFileInfos.count > 0 else {
-            addRemoteRequest(range: requestedRange)
-            return
-        }
+        var signalProducers: [SignalProducer<Data, Error>] = []
 
+        let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
         print("stored local ranges: \(ranges)")
-        
-        var startOffset = requestedRange.lowerBound
-        let endOffset = requestedRange.upperBound
-        for fileInfo in localFileInfos {
-            if SZAVPlayerDataLoader.isOutOfRange(startOffset: startOffset, endOffset: endOffset, fileInfo: fileInfo) {
-                continue
+        if localFileInfos.isEmpty {
+            signalProducers.append(remoteRequestProducer(range: requestedRange))
+        } else {
+            var startOffset = requestedRange.lowerBound
+            let endOffset = requestedRange.upperBound
+            for fileInfo in localFileInfos {
+                if SZAVPlayerDataLoader.isOutOfRange(startOffset: startOffset, endOffset: endOffset, fileInfo: fileInfo) {
+                    continue
+                }
+
+                let localFileStartOffset = fileInfo.startOffset
+                if startOffset >= localFileStartOffset {
+                    signalProducers.append(localRequestProducer(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo))
+                } else {
+                    signalProducers.append(remoteRequestProducer(startOffset: startOffset, endOffset: localFileStartOffset + 1))
+                    signalProducers.append(localRequestProducer(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo))
+                }
             }
 
-            let localFileStartOffset = fileInfo.startOffset
-            if startOffset >= localFileStartOffset {
-                addLocalFileRequest(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo)
-            } else {
-                addRemoteRequest(startOffset: startOffset, endOffset: localFileStartOffset + 1)
-                addLocalFileRequest(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo)
+            let notEnded = startOffset < endOffset
+            if notEnded {
+                signalProducers.append(remoteRequestProducer(startOffset: startOffset, endOffset: endOffset))
             }
         }
-
-        let notEnded = startOffset < endOffset
-        if notEnded {
-            addRemoteRequest(startOffset: startOffset, endOffset: endOffset)
+        
+        let compositionProducer = SignalProducer(signalProducers).flatten(.concat)
+        disposable = compositionProducer.start { [weak self, callbackQueue] action in
+            callbackQueue.async { [weak self] in
+                guard let strongSelf = self else { return }
+                switch action {
+                case .value(let data):
+                    strongSelf.delegate?.dataLoader(strongSelf, didReceive: data)
+                case .completed, .interrupted:
+                    strongSelf.delegate?.dataLoaderDidFinish(strongSelf)
+                case .failed(let error):
+                    strongSelf.delegate?.dataLoader(strongSelf, didFailWithError: error)
+                }
+            }
         }
     }
 
     public func cancel() {
         cancelled = true
-        operationQueue.cancelAllOperations()
+        disposable?.dispose()
     }
 
     public static func isOutOfRange(startOffset: Int64, endOffset: Int64, fileInfo: SZAVPlayerLocalFileInfo) -> Bool {
@@ -97,100 +107,80 @@ class AVPlayerDataLoader: NSObject {
 
 }
 
-// MARK: - Request
-
 extension AVPlayerDataLoader {
-
-    private func localFileOperation(range: SZAVPlayerRange, fileInfo: SZAVPlayerLocalFileInfo) -> Operation {
-        return BlockOperation { [weak self] in
-            guard let weakSelf = self, !weakSelf.cancelled && !weakSelf.failed else { return }
-
-            let fileURL = SZAVPlayerFileSystem.localFilePath(fileName: fileInfo.localFileName)
-            if let data = SZAVPlayerFileSystem.read(url: fileURL, range: range) {
-                weakSelf.callbackQueue.sync { [weak weakSelf] in
-                    guard let weakSelf = weakSelf, !weakSelf.cancelled && !weakSelf.failed else { return }
-
-                    weakSelf.delegate?.dataLoader(weakSelf, didReceive: data)
-                }
-            } else {
-                weakSelf.callbackQueue.sync { [weak weakSelf] in
-                    guard let weakSelf = weakSelf, !weakSelf.cancelled && !weakSelf.failed else { return }
-
-                    weakSelf.delegate?.dataLoader(weakSelf, didFailWithError: SZAVPlayerError.localFileNotExist)
-                }
-            }
-        }
-    }
-
-    private func remoteRequestOperation(range: SZAVPlayerRange) -> SZAVPlayerRequestOperation {
-        let operation = SZAVPlayerRequestOperation(url: url, range: range)
-        operation.delegate = self
-
-        return operation
-    }
-
-}
-
-// MARK: - SZAVPlayerRequestOperationDelegate
-
-extension AVPlayerDataLoader: SZAVPlayerRequestOperationDelegate {
-
-    func requestOperationWillStart(_ operation: SZAVPlayerRequestOperation) {
-        mediaData = Data()
-    }
-
-    func requestOperation(_ operation: SZAVPlayerRequestOperation, didReceive data: Data) {
-        mediaData?.append(data)
-        callbackQueue.sync {
-            delegate?.dataLoader(self, didReceive: data)
-        }
-    }
-
-    func requestOperation(_ operation: SZAVPlayerRequestOperation, didCompleteWithError error: Error?) {
-        callbackQueue.sync {
-            if let error = error {
-                delegate?.dataLoader(self, didFailWithError: error)
-            } else {
-                delegate?.dataLoaderDidFinish(self)
-            }
-        }
-
-        if let mediaData = mediaData, mediaData.count > 0 {
-            SZAVPlayerCache.shared.save(uniqueID: uniqueID, mediaData: mediaData, startOffset: operation.startOffset)
-            self.mediaData = nil
-        }
-    }
-
-}
-
-// MARK: - Private
-
-private extension AVPlayerDataLoader {
-
-    func addLocalFileRequest(startOffset: inout Int64, endOffset: Int64, fileInfo: SZAVPlayerLocalFileInfo) {
+    func localRequestProducer(startOffset: inout Int64, endOffset: Int64, fileInfo: SZAVPlayerLocalFileInfo) -> SignalProducer<Data, Error> {
         let requestedLength = endOffset - startOffset
-        guard requestedLength > 0 else { return }
+        guard requestedLength > 0 else { return .empty }
 
         let localFileStartOffset = max(0, startOffset - fileInfo.startOffset)
         let localFileUsefulLength = min(fileInfo.loadedByteLength - localFileStartOffset, requestedLength)
         let localFileRequestRange = localFileStartOffset..<localFileStartOffset + localFileUsefulLength
         print("addLocalRequest \(localFileStartOffset + fileInfo.startOffset ..< localFileStartOffset + fileInfo.startOffset + localFileUsefulLength)")
-        operationQueue.addOperation(localFileOperation(range: localFileRequestRange, fileInfo: fileInfo))
 
         startOffset = startOffset + localFileUsefulLength
+        return localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
     }
+    
+    func localRequestProducer(range: SZAVPlayerRange, fileInfo: SZAVPlayerLocalFileInfo) -> SignalProducer<Data, Error> {
+        return SignalProducer { (observer, _) in
+            let fileURL = SZAVPlayerFileSystem.localFilePath(fileName: fileInfo.localFileName)
+            if let data = SZAVPlayerFileSystem.read(url: fileURL, range: range) {
+                observer.send(value: data)
+                observer.sendCompleted()
+            } else {
+                observer.send(error: SZAVPlayerError.localFileNotExist)
+            }
+        }
+    }
+}
 
-    func addRemoteRequest(startOffset: Int64, endOffset: Int64) {
-        guard startOffset < endOffset else { return }
-
+extension AVPlayerDataLoader {
+    func remoteRequestProducer(startOffset: Int64, endOffset: Int64) -> SignalProducer<Data, Error> {
+        guard startOffset < endOffset else { return .empty}
         let range = startOffset..<endOffset
-        addRemoteRequest(range: range)
+        return remoteRequestProducer(range: range)
     }
 
-    func addRemoteRequest(range: SZAVPlayerRange) {
+    func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
         print("addRemoteRequest \(range)")
-        let operation = remoteRequestOperation(range: range)
-        operationQueue.addOperation(operation)
-    }
+        return SignalProducer { [url] observer, lifetime in
+            let configuration = URLSessionConfiguration.default
+            configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+            let sessionDelegate = URLSessionDataDelegateProxy()
+            let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)
+            
+            sessionDelegate.didReceiveData = { data in
+                observer.send(value: data)
+            }
+            sessionDelegate.didCompleteWithError = { [weak session] error in
+                if let error = error {
+                    observer.send(error: error)
+                } else {
+                    observer.sendCompleted()
+                }
+                session?.finishTasksAndInvalidate()
+            }
 
+            var request = URLRequest(url: url)
+            let rangeHeader = "bytes=\(range.lowerBound)-\(range.upperBound)"
+            request.setValue(rangeHeader, forHTTPHeaderField: "Range")
+            
+            let task = session.dataTask(with: request)
+            
+            lifetime.observeEnded {
+                task.cancel()
+            }
+            task.resume()
+        }.on { [weak self] in
+            self?.mediaData = Data()
+        } terminated: { [weak self] in
+            guard let strongSelf = self, let mediaData = strongSelf.mediaData, mediaData.count > 0 else {
+                return
+            }
+            SZAVPlayerCache.shared.save(uniqueID: strongSelf.uniqueID, mediaData: mediaData, startOffset: range.lowerBound)
+            self?.mediaData = nil
+        } value: { [weak self] data in
+            self?.mediaData?.append(data)
+        }
+    }
 }
