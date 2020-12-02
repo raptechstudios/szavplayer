@@ -62,7 +62,7 @@ class AVPlayerDataLoader: NSObject {
                 if startOffset >= localFileStartOffset {
                     signalProducers.append(localRequestProducer(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo))
                 } else {
-                    signalProducers.append(remoteRequestProducer(startOffset: startOffset, endOffset: localFileStartOffset + 1))
+                    signalProducers.append(remoteRequestProducer(startOffset: startOffset, endOffset: localFileStartOffset))
                     signalProducers.append(localRequestProducer(startOffset: &startOffset, endOffset: endOffset, fileInfo: fileInfo))
                 }
             }
