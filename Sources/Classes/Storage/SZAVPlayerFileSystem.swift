@@ -16,7 +16,8 @@ struct SZAVPlayerFileSystem {
     }()
 
     static let cacheDirectory: URL = {
-        return SZAVPlayerFileSystem.documentsDirectory.appendingPathComponent("SZCache")
+        let urls = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+        return urls[urls.endIndex - 1].appendingPathComponent("SZCache")
     }()
 
     static func createCacheDirectory() {
