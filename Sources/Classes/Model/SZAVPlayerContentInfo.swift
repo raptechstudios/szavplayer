@@ -15,6 +15,7 @@ public struct SZAVPlayerContentInfo: SZBaseModel {
     var mimeType: String
     var contentLength: Int64
     var updated: Int64 = 0
+    var accessed: Int64 = 0
     var isByteRangeAccessSupported: Bool = false
 
     static func isNotExpired(updated: Int64) -> Bool {
@@ -33,6 +34,7 @@ extension SZAVPlayerContentInfo: Decodable {
         mimeType = try values.decode(String.self, forKey: .mimeType)
         contentLength = try values.decode(Int64.self, forKey: .contentLength)
         updated = try values.decode(Int64.self, forKey: .updated)
+        accessed = try values.decode(Int64.self, forKey: .accessed)
 
         let rangeAccessSupportedValue = try values.decode(Int.self, forKey: .isByteRangeAccessSupported)
         isByteRangeAccessSupported = rangeAccessSupportedValue == 1 ? true : false

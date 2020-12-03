@@ -1,8 +1,8 @@
 //
-//  SZAVPlayerAssetLoader.swift
+//  AVPlayerAssetLoader.swift
 //  SZAVPlayer
 //
-//  Created by CaiSanze on 2019/12/23.
+//  Created by Vladislav Krasovsky on 12/1/20.
 //
 
 import UIKit
@@ -12,15 +12,15 @@ import CoreServices
 /// AVPlayerItem custom schema
 private let SZAVPlayerItemScheme = "SZAVPlayerItemScheme"
 
-public protocol SZAVPlayerAssetLoaderDelegate: AnyObject {
-    func assetLoaderDidFinishDownloading(_ assetLoader: SZAVPlayerAssetLoader)
-    func assetLoader(_ assetLoader: SZAVPlayerAssetLoader, didDownload bytes: Int64)
-    func assetLoader(_ assetLoader: SZAVPlayerAssetLoader, downloadingFailed error: Error)
+public protocol AVPlayerAssetLoaderDelegate: AnyObject {
+    func assetLoaderDidFinishDownloading(_ assetLoader: AVPlayerAssetLoader)
+    func assetLoader(_ assetLoader: AVPlayerAssetLoader, didDownload bytes: Int64)
+    func assetLoader(_ assetLoader: AVPlayerAssetLoader, downloadingFailed error: Error)
 }
 
-public class SZAVPlayerAssetLoader: NSObject {
+public class AVPlayerAssetLoader: NSObject {
 
-    public weak var delegate: SZAVPlayerAssetLoaderDelegate?
+    public weak var delegate: AVPlayerAssetLoaderDelegate?
     public var uniqueID: String = "defaultUniqueID"
     public let url: URL
     public var urlAsset: AVURLAsset?
@@ -68,7 +68,7 @@ public class SZAVPlayerAssetLoader: NSObject {
 
 // MARK: - Actions
 
-extension SZAVPlayerAssetLoader {
+extension AVPlayerAssetLoader {
 
     public func cleanup() {
         loadedLength = 0
@@ -81,11 +81,12 @@ extension SZAVPlayerAssetLoader {
             return false
         }
 
+        print("informationRequest")
+        
         // use cached info first
-        if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID),
-            SZAVPlayerContentInfo.isNotExpired(updated: contentInfo.updated)
-        {
+        if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
+            print("informationRequest finish (local))")
             loadingRequest.finishLoading()
 
             return true
@@ -131,17 +132,9 @@ extension SZAVPlayerAssetLoader {
             }
 
             if let error = error {
-                let nsError = error as NSError
-                if SZAVPlayerAssetLoader.isNetworkError(code: nsError.code),
-                    let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID)
-                {
-                    self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-                    loadingRequest.finishLoading()
-                } else {
-                    SZLogError("Failed with error: \(String(describing: error))")
-                    loadingRequest.finishLoading(with: error)
-                }
-
+                SZLogError("Failed with error: \(String(describing: error))")
+                print("informationRequest finish (error))")
+                loadingRequest.finishLoading(with: error)
                 return
             }
 
@@ -154,6 +147,7 @@ extension SZAVPlayerAssetLoader {
                     SZAVPlayerDatabase.shared.update(contentInfo: info)
                 }
                 self.fillInWithRemoteResponse(infoRequest, response: response)
+                print("informationRequest finish (\(response.sz_expectedContentLength))")
                 loadingRequest.finishLoading()
             }
 
@@ -176,7 +170,9 @@ extension SZAVPlayerAssetLoader {
         let length = Int64(avDataRequest.requestedLength)
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
-        if let lastRequest = currentRequest as? SZAVPlayerDataRequest {
+        
+        print("dataRequest \(requestedRange)")
+        if let lastRequest = currentRequest as? AVPlayerDataRequest {
             if lastRequest.range == requestedRange {
                 return true
             } else {
@@ -184,13 +180,13 @@ extension SZAVPlayerAssetLoader {
             }
         }
 
-        let loader = SZAVPlayerDataLoader(uniqueID: uniqueID,
+        let loader = AVPlayerDataLoader(uniqueID: uniqueID,
                                           url: url,
                                           range: requestedRange,
                                           callbackQueue: loaderQueue)
         loader.delegate = self
-        let dataRequest: SZAVPlayerDataRequest = {
-            return SZAVPlayerDataRequest(
+        let dataRequest: AVPlayerDataRequest = {
+            return AVPlayerDataRequest(
                 resourceUrl: url,
                 loadingRequest: loadingRequest,
                 dataRequest: avDataRequest,
@@ -228,7 +224,7 @@ extension SZAVPlayerAssetLoader {
 
 // MARK: - AVAssetResourceLoaderDelegate
 
-extension SZAVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
+extension AVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
 
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool
@@ -245,32 +241,37 @@ extension SZAVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                didCancel loadingRequest: AVAssetResourceLoadingRequest)
     {
+        print("resourceLoader didCancel loadingRequest")
         currentRequest?.cancel()
+        print("resourceLoader didCancel after")
     }
 
 }
 
 // MARK: - SZAVPlayerDataLoaderDelegate
 
-extension SZAVPlayerAssetLoader: SZAVPlayerDataLoaderDelegate {
+extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
 
-    func dataLoader(_ loader: SZAVPlayerDataLoader, didReceive data: Data) {
+    func dataLoader(_ loader: AVPlayerDataLoader, didReceive data: Data) {
         if let dataRequest = currentRequest?.loadingRequest.dataRequest {
             dataRequest.respond(with: data)
         }
 
         loadedLength = loadedLength + Int64(data.count)
+        print("dataRequest loaded \(loadedLength)")
         delegate?.assetLoader(self, didDownload: loadedLength)
     }
 
-    func dataLoaderDidFinish(_ loader: SZAVPlayerDataLoader) {
+    func dataLoaderDidFinish(_ loader: AVPlayerDataLoader) {
+        print("dataRequest finish")
         currentRequest?.loadingRequest.finishLoading()
         currentRequest = nil
 
         delegate?.assetLoaderDidFinishDownloading(self)
     }
 
-    func dataLoader(_ loader: SZAVPlayerDataLoader, didFailWithError error: Error) {
+    func dataLoader(_ loader: AVPlayerDataLoader, didFailWithError error: Error) {
+        print("dataRequest finish (error)")
         currentRequest?.loadingRequest.finishLoading(with: error)
         currentRequest = nil
 
@@ -352,7 +353,7 @@ fileprivate extension URLResponse {
 
 // MARK: - Getter
 
-extension SZAVPlayerAssetLoader {
+extension AVPlayerAssetLoader {
 
     private static func isNetworkError(code: Int) -> Bool {
         let errorCodes = [

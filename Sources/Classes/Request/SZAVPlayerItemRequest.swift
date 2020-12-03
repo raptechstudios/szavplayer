@@ -39,24 +39,25 @@ class SZAVPlayerContentInfoRequest: SZAVPlayerRequest {
     func cancel() {
         task.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("informationRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }
 
 }
 
-class SZAVPlayerDataRequest: SZAVPlayerRequest {
+class AVPlayerDataRequest: SZAVPlayerRequest {
     
     let resourceUrl: URL
     let loadingRequest: AVAssetResourceLoadingRequest
     let dataRequest: AVAssetResourceLoadingDataRequest
-    let loader: SZAVPlayerDataLoader
+    let loader: AVPlayerDataLoader
     let range: SZAVPlayerRange
     
     init(resourceUrl: URL,
          loadingRequest: AVAssetResourceLoadingRequest,
          dataRequest: AVAssetResourceLoadingDataRequest,
-         loader: SZAVPlayerDataLoader,
+         loader: AVPlayerDataLoader,
          range: SZAVPlayerRange)
     {
         self.resourceUrl = resourceUrl
@@ -69,10 +70,10 @@ class SZAVPlayerDataRequest: SZAVPlayerRequest {
     func cancel() {
         loader.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("dataRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }
-    
 }
 
 class SZAVPlayerLocalFileRequest: SZAVPlayerRequest {
@@ -92,6 +93,7 @@ class SZAVPlayerLocalFileRequest: SZAVPlayerRequest {
 
     func cancel() {
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
+            print("LocalFileRequest finish (cancel))")
             loadingRequest.finishLoading()
         }
     }

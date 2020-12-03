@@ -44,7 +44,7 @@ public class SZAVPlayerDatabase: NSObject {
         DispatchQueue.global(qos: .background).async {
             let infos = self.expiredContentInfos()
             for info in infos {
-                self.deleteMIMEType(uniqueID: info.uniqueID)
+                self.deleteContentInfo(uniqueID: info.uniqueID)
 
                 let fileInfos = self.localFileInfos(uniqueID: info.uniqueID)
                 for fileInfo in fileInfos {
@@ -74,21 +74,32 @@ extension SZAVPlayerDatabase {
             }
         }
 
+        // Here we should update accessed field to support LRU cache mechanism
+        if let contentInfo = info {
+            print("previous access date: \(Date(timeIntervalSince1970: TimeInterval(contentInfo.accessed)))")
+            dbQueue.inQueue { (db) in
+                let sql = "UPDATE \(SZAVPlayerContentInfo.tableName) SET accessed = ? WHERE uniqueID = ?"
+                let accessed = Int64(Date().timeIntervalSince1970)
+                let params: [Any] = [accessed, contentInfo.uniqueID]
+                db.execute(sql: sql, params: params)
+            }
+        }
         return info
     }
 
     public func update(contentInfo: SZAVPlayerContentInfo) {
         dbQueue.inQueue { (db) in
             let sql = "INSERT OR REPLACE INTO \(SZAVPlayerContentInfo.tableName) " +
-            "(uniqueID, mimeType, contentLength, updated, isByteRangeAccessSupported) " +
-            "values(?, ?, ?, ?, ?)"
+            "(uniqueID, mimeType, contentLength, updated, accessed, isByteRangeAccessSupported) " +
+            "values(?, ?, ?, ?, ?, ?)"
             let updated = Int64(Date().timeIntervalSince1970)
-            let params: [Any] = [contentInfo.uniqueID, contentInfo.mimeType, contentInfo.contentLength, updated, contentInfo.isByteRangeAccessSupported]
+            let accessed = Int64(Date().timeIntervalSince1970)
+            let params: [Any] = [contentInfo.uniqueID, contentInfo.mimeType, contentInfo.contentLength, updated, accessed, contentInfo.isByteRangeAccessSupported]
             db.execute(sql: sql, params: params)
         }
     }
 
-    public func deleteMIMEType(uniqueID: String) {
+    public func deleteContentInfo(uniqueID: String) {
         dbQueue.inQueue { (db) in
             let sql = "DELETE FROM \(SZAVPlayerContentInfo.tableName) WHERE uniqueID = ?"
             let params = [
@@ -101,7 +112,7 @@ extension SZAVPlayerDatabase {
     private func expiredContentInfos() -> [SZAVPlayerContentInfo] {
         var expiredInfos: [SZAVPlayerContentInfo] = []
         dbQueue.inQueue { (db) in
-            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) ORDER BY updated ASC LIMIT 5"
+            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) ORDER BY accessed ASC LIMIT 5"
             let infos = db.query(sql: sql)
             if let infoDict = infos.first,
                 let tmpInfo = SZAVPlayerContentInfo.deserialize(data: infoDict)
@@ -121,7 +132,8 @@ extension SZAVPlayerDatabase {
             "uniqueID TEXT, " +
             "mimeType TEXT, " +
             "contentLength INTEGER, " +
-            "updated INTEGER" +
+            "updated INTEGER, " +
+            "accessed INTEGER" +
             ");\n",
             "CREATE UNIQUE INDEX IF NOT EXISTS \(tableName)_uniqueID " +
             "ON \(tableName)(" +
@@ -183,6 +195,15 @@ extension SZAVPlayerDatabase {
             let sql = "DELETE FROM \(SZAVPlayerLocalFileInfo.tableName) WHERE uniqueID = ?"
             let params = [
                 uniqueID
+            ]
+            db.execute(sql: sql, params: params)
+        }
+    }
+    public func deleteLocalFileInfo(id: Int64) {
+        dbQueue.inQueue { (db) in
+            let sql = "DELETE FROM \(SZAVPlayerLocalFileInfo.tableName) WHERE id = ?"
+            let params = [
+                id
             ]
             db.execute(sql: sql, params: params)
         }
