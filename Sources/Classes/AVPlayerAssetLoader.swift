@@ -84,9 +84,7 @@ extension AVPlayerAssetLoader {
         print("informationRequest")
         
         // use cached info first
-        if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID),
-            SZAVPlayerContentInfo.isNotExpired(updated: contentInfo.updated)
-        {
+        if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
             print("informationRequest finish (local))")
             loadingRequest.finishLoading()
@@ -134,19 +132,9 @@ extension AVPlayerAssetLoader {
             }
 
             if let error = error {
-                let nsError = error as NSError
-                if AVPlayerAssetLoader.isNetworkError(code: nsError.code),
-                    let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID)
-                {
-                    self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-                    print("informationRequest finish (error -> local))")
-                    loadingRequest.finishLoading()
-                } else {
-                    SZLogError("Failed with error: \(String(describing: error))")
-                    print("informationRequest finish (error))")
-                    loadingRequest.finishLoading(with: error)
-                }
-
+                SZLogError("Failed with error: \(String(describing: error))")
+                print("informationRequest finish (error))")
+                loadingRequest.finishLoading(with: error)
                 return
             }
 
