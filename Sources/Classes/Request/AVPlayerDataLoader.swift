@@ -177,7 +177,7 @@ extension AVPlayerDataLoader {
             }
 
             var request = URLRequest(url: url)
-            let rangeHeader = "bytes=\(range.lowerBound)-\(range.upperBound)"
+            let rangeHeader = "bytes=\(range.lowerBound)-\(range.upperBound - 1)"
             request.setValue(rangeHeader, forHTTPHeaderField: "Range")
             
             let task = session.dataTask(with: request)
