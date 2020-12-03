@@ -46,36 +46,6 @@ class SZAVPlayerContentInfoRequest: SZAVPlayerRequest {
 
 }
 
-class SZAVPlayerDataRequest: SZAVPlayerRequest {
-    
-    let resourceUrl: URL
-    let loadingRequest: AVAssetResourceLoadingRequest
-    let dataRequest: AVAssetResourceLoadingDataRequest
-    let loader: SZAVPlayerDataLoader
-    let range: SZAVPlayerRange
-    
-    init(resourceUrl: URL,
-         loadingRequest: AVAssetResourceLoadingRequest,
-         dataRequest: AVAssetResourceLoadingDataRequest,
-         loader: SZAVPlayerDataLoader,
-         range: SZAVPlayerRange)
-    {
-        self.resourceUrl = resourceUrl
-        self.loadingRequest = loadingRequest
-        self.dataRequest = dataRequest
-        self.loader = loader
-        self.range = range
-    }
-    
-    func cancel() {
-        loader.cancel()
-        if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-            print("dataRequest finish (cancel))")
-            loadingRequest.finishLoading()
-        }
-    }
-}
-
 class AVPlayerDataRequest: SZAVPlayerRequest {
     
     let resourceUrl: URL

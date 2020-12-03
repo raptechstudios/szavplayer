@@ -45,36 +45,6 @@ public class SZAVPlayerCache: NSObject {
         SZAVPlayerFileSystem.cleanCachedFiles()
     }
 
-    public func isFullyCached(uniqueID: String) -> Bool {
-        let info = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)
-        let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
-        guard let contentInfo = info, contentInfo.contentLength > 0,
-            localFileInfos.count > 0 else
-        {
-            return false
-        }
-
-        var startOffset = Int64(0)
-        let endOffset = contentInfo.contentLength
-        for fileInfo in localFileInfos {
-            if SZAVPlayerDataLoader.isOutOfRange(startOffset: startOffset, endOffset: endOffset, fileInfo: fileInfo) {
-                break
-            }
-
-            let localFileStartOffset = fileInfo.startOffset
-            if startOffset >= localFileStartOffset {
-                let localFileStartOffset = max(0, startOffset - fileInfo.startOffset)
-                let localFileUsefulLength = min(fileInfo.loadedByteLength - localFileStartOffset, endOffset)
-                startOffset = startOffset + localFileUsefulLength
-            } else {
-                break
-            }
-        }
-
-        let isFullyCached = startOffset >= endOffset
-        return isFullyCached
-    }
-
     public func trimCache() {
         DispatchQueue.global(qos: .background).async {
             let directory = SZAVPlayerFileSystem.cacheDirectory

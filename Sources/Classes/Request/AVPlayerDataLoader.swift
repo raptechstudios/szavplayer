@@ -8,6 +8,8 @@
 import UIKit
 import ReactiveSwift
 
+public typealias SZAVPlayerRange = Range<Int64>
+
 protocol AVPlayerDataLoaderDelegate: AnyObject {
     func dataLoader(_ loader: AVPlayerDataLoader, didReceive data: Data)
     func dataLoaderDidFinish(_ loader: AVPlayerDataLoader)
@@ -54,7 +56,7 @@ class AVPlayerDataLoader: NSObject {
             var startOffset = requestedRange.lowerBound
             let endOffset = requestedRange.upperBound
             for fileInfo in localFileInfos {
-                if SZAVPlayerDataLoader.isOutOfRange(startOffset: startOffset, endOffset: endOffset, fileInfo: fileInfo) {
+                if AVPlayerDataLoader.isOutOfRange(startOffset: startOffset, endOffset: endOffset, fileInfo: fileInfo) {
                     continue
                 }
 
