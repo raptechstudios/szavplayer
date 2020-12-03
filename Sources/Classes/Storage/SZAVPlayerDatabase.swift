@@ -187,6 +187,15 @@ extension SZAVPlayerDatabase {
             db.execute(sql: sql, params: params)
         }
     }
+    public func deleteLocalFileInfo(id: Int64) {
+        dbQueue.inQueue { (db) in
+            let sql = "DELETE FROM \(SZAVPlayerLocalFileInfo.tableName) WHERE id = ?"
+            let params = [
+                id
+            ]
+            db.execute(sql: sql, params: params)
+        }
+    }
 
     private func createLocalFileInfoTable() {
         let tableName = SZAVPlayerLocalFileInfo.tableName

@@ -11,6 +11,7 @@ public struct SZAVPlayerLocalFileInfo: SZBaseModel {
 
     static var tableName: String = "SZAVPlayerLocalFileInfo"
 
+    var id: Int64 = -1
     var uniqueID: String
     var startOffset: Int64
     var loadedByteLength: Int64

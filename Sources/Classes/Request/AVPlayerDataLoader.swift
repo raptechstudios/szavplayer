@@ -124,7 +124,16 @@ extension AVPlayerDataLoader {
         print("addLocalRequest \(intersectionStart ..< intersectionEnd)")
 
         startOffset = intersectionEnd
-        return localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
+        let producer = localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
+        // If file doesnt exist (e.g. system has cleaned Cache folder),
+        // we should remove LocalFileInfo from db and retry with remote request
+        let recoverableProducer: SignalProducer<Data, Error> = producer.flatMapError { [weak self] _ in
+            SZAVPlayerDatabase.shared.deleteLocalFileInfo(id: fileInfo.id)
+            guard let strongSelf = self else { return .empty}
+            print("recovering")
+            return strongSelf.remoteRequestProducer(range: intersectionStart..<intersectionEnd)
+        }
+        return recoverableProducer
     }
     
     func localRequestProducer(range: SZAVPlayerRange, fileInfo: SZAVPlayerLocalFileInfo) -> SignalProducer<Data, Error> {
