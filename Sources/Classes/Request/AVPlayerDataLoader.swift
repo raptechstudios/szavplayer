@@ -111,13 +111,19 @@ extension AVPlayerDataLoader {
     func localRequestProducer(startOffset: inout Int64, endOffset: Int64, fileInfo: SZAVPlayerLocalFileInfo) -> SignalProducer<Data, Error> {
         let requestedLength = endOffset - startOffset
         guard requestedLength > 0 else { return .empty }
+        
+        let localFileStartOffset = fileInfo.startOffset
+        let localFileEndOffset = fileInfo.startOffset + fileInfo.loadedByteLength
 
-        let localFileStartOffset = max(0, startOffset - fileInfo.startOffset)
-        let localFileUsefulLength = min(fileInfo.loadedByteLength - localFileStartOffset, requestedLength)
-        let localFileRequestRange = localFileStartOffset..<localFileStartOffset + localFileUsefulLength
-        print("addLocalRequest \(localFileStartOffset + fileInfo.startOffset ..< localFileStartOffset + fileInfo.startOffset + localFileUsefulLength)")
+        let intersectionStart = max(localFileStartOffset, startOffset)
+        let intersectionEnd = min(localFileEndOffset, endOffset)
+        let intersectionLength = intersectionEnd - intersectionStart
+        guard intersectionLength > 0 else { return .empty }
 
-        startOffset = localFileStartOffset + fileInfo.startOffset + localFileUsefulLength
+        let localFileRequestRange = intersectionStart - localFileStartOffset..<intersectionEnd - localFileStartOffset
+        print("addLocalRequest \(intersectionStart ..< intersectionEnd)")
+
+        startOffset = intersectionEnd
         return localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
     }
     
