@@ -70,32 +70,8 @@ class AVPlayerDataRequest: SZAVPlayerRequest {
     func cancel() {
         loader.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-            print("dataRequest finish (cancel))")
+            print("dataRequest finish (cancel) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
             loadingRequest.finishLoading()
         }
     }
-}
-
-class SZAVPlayerLocalFileRequest: SZAVPlayerRequest {
-
-    let resourceUrl: URL
-    let loadingRequest: AVAssetResourceLoadingRequest
-    let dataRequest: AVAssetResourceLoadingDataRequest
-
-    init(resourceUrl: URL,
-         loadingRequest: AVAssetResourceLoadingRequest,
-         dataRequest: AVAssetResourceLoadingDataRequest)
-    {
-        self.resourceUrl = resourceUrl
-        self.loadingRequest = loadingRequest
-        self.dataRequest = dataRequest
-    }
-
-    func cancel() {
-        if !loadingRequest.isCancelled && !loadingRequest.isFinished {
-            print("LocalFileRequest finish (cancel))")
-            loadingRequest.finishLoading()
-        }
-    }
-
 }
