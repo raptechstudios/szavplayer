@@ -241,7 +241,7 @@ extension AVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                didCancel loadingRequest: AVAssetResourceLoadingRequest)
     {
-        print("resourceLoader didCancel loadingRequest")
+        print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset))")
         currentRequest?.cancel()
         print("resourceLoader didCancel after")
     }

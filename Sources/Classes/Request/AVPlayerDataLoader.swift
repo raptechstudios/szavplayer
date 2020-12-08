@@ -195,6 +195,7 @@ extension AVPlayerDataLoader {
                 return
             }
             SZAVPlayerCache.shared.save(uniqueID: strongSelf.uniqueID, mediaData: mediaData, startOffset: range.lowerBound)
+            print("save \(mediaData.count) bytes")
             self?.mediaData = nil
         } value: { [weak self] data in
             self?.mediaData?.append(data)
