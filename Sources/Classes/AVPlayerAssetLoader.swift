@@ -171,15 +171,8 @@ extension AVPlayerAssetLoader {
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
         
-        print("dataRequest \(requestedRange)")
-        if let lastRequest = currentRequest as? AVPlayerDataRequest {
-            if lastRequest.range == requestedRange {
-                return true
-            } else {
-                lastRequest.cancel()
-            }
-        }
-
+        print("dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
+        
         let loader = AVPlayerDataLoader(uniqueID: uniqueID,
                                           url: url,
                                           range: requestedRange,
@@ -258,12 +251,12 @@ extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
         }
 
         loadedLength = loadedLength + Int64(data.count)
-        print("dataRequest loaded \(loadedLength)")
+        print("dataRequest loaded \(loadedLength) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
         delegate?.assetLoader(self, didDownload: loadedLength)
     }
 
     func dataLoaderDidFinish(_ loader: AVPlayerDataLoader) {
-        print("dataRequest finish")
+        print("dataRequest finish (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
         currentRequest?.loadingRequest.finishLoading()
         currentRequest = nil
 
@@ -271,7 +264,7 @@ extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
     }
 
     func dataLoader(_ loader: AVPlayerDataLoader, didFailWithError error: Error) {
-        print("dataRequest finish (error)")
+        print("dataRequest finish (error) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
         currentRequest?.loadingRequest.finishLoading(with: error)
         currentRequest = nil
 

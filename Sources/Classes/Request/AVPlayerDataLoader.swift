@@ -27,7 +27,6 @@ class AVPlayerDataLoader: NSObject {
     private var mediaData: Data?
     
     private var cancelled: Bool = false
-    private var failed: Bool = false
     var disposable: Disposable?
     
     init(uniqueID: String, url: URL, range: SZAVPlayerRange, callbackQueue: DispatchQueue) {
@@ -43,7 +42,7 @@ class AVPlayerDataLoader: NSObject {
     }
 
     public func start() {
-        guard !cancelled && !failed else { return }
+        guard !cancelled else { return }
 
         var signalProducers: [SignalProducer<Data, Error>] = []
 
@@ -77,23 +76,21 @@ class AVPlayerDataLoader: NSObject {
         
         let compositionProducer = SignalProducer(signalProducers).flatten(.concat)
         disposable = compositionProducer.start { [weak self, callbackQueue] action in
-            callbackQueue.async { [weak self] in
-                guard let strongSelf = self else { return }
-                switch action {
-                case .value(let data):
-                    strongSelf.delegate?.dataLoader(strongSelf, didReceive: data)
-                case .completed, .interrupted:
-                    strongSelf.delegate?.dataLoaderDidFinish(strongSelf)
-                case .failed(let error):
-                    strongSelf.delegate?.dataLoader(strongSelf, didFailWithError: error)
-                }
+            guard let strongSelf = self else { return }
+            switch action {
+            case .value(let data):
+                strongSelf.delegate?.dataLoader(strongSelf, didReceive: data)
+            case .completed, .interrupted:
+                strongSelf.delegate?.dataLoaderDidFinish(strongSelf)
+            case .failed(let error):
+                strongSelf.delegate?.dataLoader(strongSelf, didFailWithError: error)
             }
         }
     }
 
     public func cancel() {
-        cancelled = true
         disposable?.dispose()
+        cancelled = true
     }
 
     public static func isOutOfRange(startOffset: Int64, endOffset: Int64, fileInfo: SZAVPlayerLocalFileInfo) -> Bool {
@@ -160,20 +157,24 @@ extension AVPlayerDataLoader {
 
     func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
         print("addRemoteRequest \(range)")
-        return SignalProducer { [url] observer, lifetime in
+        return SignalProducer { [url, callbackQueue] observer, lifetime in
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let sessionDelegate = URLSessionDataDelegateProxy()
             let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)
             
-            sessionDelegate.didReceiveData = { data in
-                observer.send(value: data)
+            sessionDelegate.didReceiveData = { [callbackQueue] data in
+                callbackQueue.async {
+                    observer.send(value: data)
+                }
             }
-            sessionDelegate.didCompleteWithError = { [weak session] error in
-                if let error = error {
-                    observer.send(error: error)
-                } else {
-                    observer.sendCompleted()
+            sessionDelegate.didCompleteWithError = { [weak session, callbackQueue] error in
+                callbackQueue.async {
+                    if let error = error {
+                        observer.send(error: error)
+                    } else {
+                        observer.sendCompleted()
+                    }
                 }
                 session?.finishTasksAndInvalidate()
             }
@@ -199,6 +200,7 @@ extension AVPlayerDataLoader {
             self?.mediaData = nil
         } value: { [weak self] data in
             self?.mediaData?.append(data)
+            print("mediaData: \(self?.mediaData?.count ?? 0) bytes")
         }
     }
 }
