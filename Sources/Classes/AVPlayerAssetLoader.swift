@@ -81,12 +81,12 @@ extension AVPlayerAssetLoader {
             return false
         }
 
-        print("informationRequest")
+        print("* informationRequest")
         
         // use cached info first
         if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-            print("informationRequest finish (local))")
+            print("* informationRequest finish (local))")
             loadingRequest.finishLoading()
 
             return true
@@ -133,7 +133,7 @@ extension AVPlayerAssetLoader {
 
             if let error = error {
                 SZLogError("Failed with error: \(String(describing: error))")
-                print("informationRequest finish (error))")
+                print("* informationRequest finish (error))")
                 loadingRequest.finishLoading(with: error)
                 return
             }
@@ -147,7 +147,7 @@ extension AVPlayerAssetLoader {
                     SZAVPlayerDatabase.shared.update(contentInfo: info)
                 }
                 self.fillInWithRemoteResponse(infoRequest, response: response)
-                print("informationRequest finish (\(response.sz_expectedContentLength))")
+                print("* informationRequest finish (\(response.sz_expectedContentLength))")
                 loadingRequest.finishLoading()
             }
 
@@ -171,7 +171,7 @@ extension AVPlayerAssetLoader {
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
         
-        print("dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
+        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
         
         let loader = AVPlayerDataLoader(uniqueID: uniqueID,
                                           url: url,
@@ -234,7 +234,7 @@ extension AVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                didCancel loadingRequest: AVAssetResourceLoadingRequest)
     {
-        print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset))")
+        print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset)) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
         currentRequest?.cancel()
         print("resourceLoader didCancel after")
     }
@@ -256,7 +256,7 @@ extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
     }
 
     func dataLoaderDidFinish(_ loader: AVPlayerDataLoader) {
-        print("dataRequest finish (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
+        print("* dataRequest finish (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
         currentRequest?.loadingRequest.finishLoading()
         currentRequest = nil
 
@@ -264,7 +264,7 @@ extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
     }
 
     func dataLoader(_ loader: AVPlayerDataLoader, didFailWithError error: Error) {
-        print("dataRequest finish (error) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
+        print("* dataRequest finish (error) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
         currentRequest?.loadingRequest.finishLoading(with: error)
         currentRequest = nil
 

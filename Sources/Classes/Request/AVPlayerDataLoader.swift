@@ -186,9 +186,11 @@ extension AVPlayerDataLoader {
             let task = session.dataTask(with: request)
             
             lifetime.observeEnded {
+                print("task.cancel()")
                 task.cancel()
             }
             task.resume()
+            print("task started")
         }.on { [weak self] in
             self?.mediaData = Data()
         } terminated: { [weak self] in
@@ -200,7 +202,6 @@ extension AVPlayerDataLoader {
             self?.mediaData = nil
         } value: { [weak self] data in
             self?.mediaData?.append(data)
-            print("mediaData: \(self?.mediaData?.count ?? 0) bytes")
         }
     }
 }
