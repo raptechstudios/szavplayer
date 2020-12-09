@@ -12,27 +12,17 @@ import CoreServices
 /// AVPlayerItem custom schema
 private let SZAVPlayerItemScheme = "SZAVPlayerItemScheme"
 
-public protocol AVPlayerAssetLoaderDelegate: AnyObject {
-    func assetLoaderDidFinishDownloading(_ assetLoader: AVPlayerAssetLoader)
-    func assetLoader(_ assetLoader: AVPlayerAssetLoader, didDownload bytes: Int64)
-    func assetLoader(_ assetLoader: AVPlayerAssetLoader, downloadingFailed error: Error)
-}
-
 public class AVPlayerAssetLoader: NSObject {
 
-    public weak var delegate: AVPlayerAssetLoaderDelegate?
     public var uniqueID: String = "defaultUniqueID"
     public let url: URL
     public var urlAsset: AVURLAsset?
 
     private let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.loaderQueue")
-    private var currentRequest: SZAVPlayerRequest? {
-        didSet {
-            oldValue?.cancel()
-        }
-    }
+
+    private var pendingRequests: [SZAVPlayerRequest] = []
+
     private var isCancelled: Bool = false
-    private var loadedLength: Int64 = 0
 
     public init(url: URL) {
         self.url = url
@@ -71,9 +61,8 @@ public class AVPlayerAssetLoader: NSObject {
 extension AVPlayerAssetLoader {
 
     public func cleanup() {
-        loadedLength = 0
         isCancelled = true
-        currentRequest?.cancel()
+        pendingRequests.forEach { $0.cancel() }
     }
 
     private func handleContentInfoRequest(loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
@@ -103,31 +92,27 @@ extension AVPlayerAssetLoader {
                                            error: error)
         }
 
-        self.currentRequest = SZAVPlayerContentInfoRequest(
+        let pendingRequest = SZAVPlayerContentInfoRequest(
             resourceUrl: url,
             loadingRequest: loadingRequest,
             infoRequest: infoRequest,
             task: task
         )
 
+        pendingRequests.append(pendingRequest)
         task.resume()
 
         return true
     }
 
-    private func handleContentInfoResponse(loadingRequest: AVAssetResourceLoadingRequest,
-                                           infoRequest: AVAssetResourceLoadingContentInformationRequest,
-                                           response: URLResponse?,
-                                           error: Error?)
-    {
-        self.loaderQueue.async {
+    private func handleContentInfoResponse(
+        loadingRequest: AVAssetResourceLoadingRequest,
+        infoRequest: AVAssetResourceLoadingContentInformationRequest,
+        response: URLResponse?,
+        error: Error?
+    ) {
+        loaderQueue.async {
             if self.isCancelled || loadingRequest.isCancelled {
-                return
-            }
-
-            guard let request = self.currentRequest as? SZAVPlayerContentInfoRequest,
-                loadingRequest === request.loadingRequest else
-            {
                 return
             }
 
@@ -151,9 +136,7 @@ extension AVPlayerAssetLoader {
                 loadingRequest.finishLoading()
             }
 
-            if self.currentRequest === request {
-                self.currentRequest = nil
-            }
+            self.removePendingRequest(for: loadingRequest)
         }
     }
 
@@ -171,29 +154,55 @@ extension AVPlayerAssetLoader {
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
         
-        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
+        let useCache = pendingRequests.isEmpty
+        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
         
-        let loader = AVPlayerDataLoader(uniqueID: uniqueID,
-                                          url: url,
-                                          range: requestedRange,
-                                          callbackQueue: loaderQueue)
-        loader.delegate = self
-        let dataRequest: AVPlayerDataRequest = {
-            return AVPlayerDataRequest(
-                resourceUrl: url,
-                loadingRequest: loadingRequest,
-                dataRequest: avDataRequest,
-                loader: loader,
-                range: requestedRange
-            )
-        }()
+        let loader = AVPlayerDataLoader(
+            uniqueID: uniqueID,
+            url: url,
+            range: requestedRange,
+            callbackQueue: loaderQueue,
+            useCache: useCache
+        ) { [weak self] event in
+            guard let strongSelf = self, !loadingRequest.isCancelled, !loadingRequest.isFinished else { return }
+            switch event {
+            case .data(let data):
+                avDataRequest.respond(with: data)
+                print("dataRequest loaded \(Int64(data.count)) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
+            case .finish(let error):
+                if let error = error {
+                    print("* dataRequest finish (error) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
+                    loadingRequest.finishLoading(with: error)
+                } else {
+                    print("* dataRequest finish (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
+                    loadingRequest.finishLoading()
+                }
+                strongSelf.removePendingRequest(for: loadingRequest)
+            }
+        }
+        let dataRequest = AVPlayerDataRequest(
+            resourceUrl: url,
+            loadingRequest: loadingRequest,
+            dataRequest: avDataRequest,
+            loader: loader,
+            range: requestedRange
+        )
 
-        self.currentRequest = dataRequest
+        pendingRequests.append(dataRequest)
         loader.start()
 
         return true
     }
 
+    @discardableResult
+    private func removePendingRequest(for loadingRequest: AVAssetResourceLoadingRequest) -> SZAVPlayerRequest? {
+        guard let requestIndex = pendingRequests.firstIndex(where: { $0.loadingRequest === loadingRequest }) else {
+            print("ERROR")
+            return nil
+        }
+        return pendingRequests.remove(at: requestIndex)
+    }
+    
     private func fillInWithLocalData(_ request: AVAssetResourceLoadingContentInformationRequest, contentInfo: SZAVPlayerContentInfo) {
         if let contentType = UTTypeCreatePreferredIdentifierForTag(kUTTagClassMIMEType, contentInfo.mimeType as CFString, nil) {
             request.contentType = contentType.takeRetainedValue() as String
@@ -235,40 +244,9 @@ extension AVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
                                didCancel loadingRequest: AVAssetResourceLoadingRequest)
     {
         print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset)) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
-        currentRequest?.cancel()
+        let request = removePendingRequest(for: loadingRequest)
+        request?.cancel()
         print("resourceLoader didCancel after")
-    }
-
-}
-
-// MARK: - SZAVPlayerDataLoaderDelegate
-
-extension AVPlayerAssetLoader: AVPlayerDataLoaderDelegate {
-
-    func dataLoader(_ loader: AVPlayerDataLoader, didReceive data: Data) {
-        if let dataRequest = currentRequest?.loadingRequest.dataRequest {
-            dataRequest.respond(with: data)
-        }
-
-        loadedLength = loadedLength + Int64(data.count)
-        print("dataRequest loaded \(loadedLength) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
-        delegate?.assetLoader(self, didDownload: loadedLength)
-    }
-
-    func dataLoaderDidFinish(_ loader: AVPlayerDataLoader) {
-        print("* dataRequest finish (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
-        currentRequest?.loadingRequest.finishLoading()
-        currentRequest = nil
-
-        delegate?.assetLoaderDidFinishDownloading(self)
-    }
-
-    func dataLoader(_ loader: AVPlayerDataLoader, didFailWithError error: Error) {
-        print("* dataRequest finish (error) (\(Unmanaged.passUnretained(currentRequest!.loadingRequest.dataRequest!).toOpaque()))")
-        currentRequest?.loadingRequest.finishLoading(with: error)
-        currentRequest = nil
-
-        delegate?.assetLoader(self, downloadingFailed: error)
     }
 
 }

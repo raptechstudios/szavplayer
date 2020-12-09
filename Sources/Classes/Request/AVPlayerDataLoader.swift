@@ -10,30 +10,39 @@ import ReactiveSwift
 
 public typealias SZAVPlayerRange = Range<Int64>
 
-protocol AVPlayerDataLoaderDelegate: AnyObject {
-    func dataLoader(_ loader: AVPlayerDataLoader, didReceive data: Data)
-    func dataLoaderDidFinish(_ loader: AVPlayerDataLoader)
-    func dataLoader(_ loader: AVPlayerDataLoader, didFailWithError error: Error)
+enum AVPlayerDataLoaderEvent {
+    case data(Data)
+    case finish(Error?)
 }
 
 class AVPlayerDataLoader: NSObject {
-
-    public weak var delegate: AVPlayerDataLoaderDelegate?
 
     private let callbackQueue: DispatchQueue
     private let uniqueID: String
     private let url: URL
     private let requestedRange: SZAVPlayerRange
+    private let useCache: Bool
     private var mediaData: Data?
     
     private var cancelled: Bool = false
     var disposable: Disposable?
     
-    init(uniqueID: String, url: URL, range: SZAVPlayerRange, callbackQueue: DispatchQueue) {
+    private let eventHandler: (AVPlayerDataLoaderEvent) -> Void
+    
+    init(
+        uniqueID: String,
+        url: URL,
+        range: SZAVPlayerRange,
+        callbackQueue: DispatchQueue,
+        useCache: Bool,
+        eventHandler: @escaping (AVPlayerDataLoaderEvent) -> Void
+    ) {
         self.uniqueID = uniqueID
         self.url = url
         self.requestedRange = range
         self.callbackQueue = callbackQueue
+        self.useCache = useCache
+        self.eventHandler = eventHandler
         super.init()
     }
 
@@ -49,7 +58,7 @@ class AVPlayerDataLoader: NSObject {
         let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
         print("stored local ranges: \(ranges)")
-        if localFileInfos.isEmpty {
+        if !useCache || localFileInfos.isEmpty {
             signalProducers.append(remoteRequestProducer(range: requestedRange))
         } else {
             var startOffset = requestedRange.lowerBound
@@ -79,11 +88,11 @@ class AVPlayerDataLoader: NSObject {
             guard let strongSelf = self else { return }
             switch action {
             case .value(let data):
-                strongSelf.delegate?.dataLoader(strongSelf, didReceive: data)
+                strongSelf.eventHandler(.data(data))
             case .completed, .interrupted:
-                strongSelf.delegate?.dataLoaderDidFinish(strongSelf)
+                strongSelf.eventHandler(.finish(nil))
             case .failed(let error):
-                strongSelf.delegate?.dataLoader(strongSelf, didFailWithError: error)
+                strongSelf.eventHandler(.finish(error))
             }
         }
     }
@@ -157,7 +166,7 @@ extension AVPlayerDataLoader {
 
     func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
         print("addRemoteRequest \(range)")
-        return SignalProducer { [url, callbackQueue] observer, lifetime in
+        let producer: SignalProducer<Data, Error> = SignalProducer { [url, callbackQueue] observer, lifetime in
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let sessionDelegate = URLSessionDataDelegateProxy()
@@ -191,17 +200,24 @@ extension AVPlayerDataLoader {
             }
             task.resume()
             print("task started")
-        }.on { [weak self] in
-            self?.mediaData = Data()
-        } terminated: { [weak self] in
-            guard let strongSelf = self, let mediaData = strongSelf.mediaData, mediaData.count > 0 else {
-                return
-            }
-            SZAVPlayerCache.shared.save(uniqueID: strongSelf.uniqueID, mediaData: mediaData, startOffset: range.lowerBound)
-            print("save \(mediaData.count) bytes")
-            self?.mediaData = nil
-        } value: { [weak self] data in
-            self?.mediaData?.append(data)
+        }
+        
+        if useCache {
+            return producer
+                .on { [weak self] in
+                    self?.mediaData = Data()
+                } terminated: { [weak self] in
+                    guard let strongSelf = self, let mediaData = strongSelf.mediaData, mediaData.count > 0 else {
+                        return
+                    }
+                    SZAVPlayerCache.shared.save(uniqueID: strongSelf.uniqueID, mediaData: mediaData, startOffset: range.lowerBound)
+                    print("save \(mediaData.count) bytes")
+                    self?.mediaData = nil
+                } value: { [weak self] data in
+                    self?.mediaData?.append(data)
+                }
+        } else {
+            return producer
         }
     }
 }

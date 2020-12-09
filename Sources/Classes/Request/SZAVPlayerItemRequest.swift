@@ -68,7 +68,6 @@ class AVPlayerDataRequest: SZAVPlayerRequest {
     }
     
     func cancel() {
-        loader.delegate = nil
         loader.cancel()
         if !loadingRequest.isCancelled && !loadingRequest.isFinished {
             print("* dataRequest finish (cancel) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
