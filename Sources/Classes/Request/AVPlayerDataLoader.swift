@@ -75,7 +75,7 @@ class AVPlayerDataLoader: NSObject {
         }
         
         let compositionProducer = SignalProducer(signalProducers).flatten(.concat)
-        disposable = compositionProducer.start { [weak self, callbackQueue] action in
+        disposable = compositionProducer.start { [weak self] action in
             guard let strongSelf = self else { return }
             switch action {
             case .value(let data):
