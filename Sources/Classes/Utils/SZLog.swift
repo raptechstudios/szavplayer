@@ -7,7 +7,7 @@
 import UIKit
 
 #if DEBUG
-private let shouldLog: Bool = true
+private let shouldLog: Bool = false
 #else
 private let shouldLog: Bool = false
 #endif
@@ -125,6 +125,6 @@ class SZLogFormatter: NSObject {
         
         let dateStr = dateFormatter.string(from: Date())
         let finalMessage = String(format: "%@ | %@ %@", logLevelStr, dateStr, logMessage)
-//        print(finalMessage)
+        print(finalMessage)
     }
 }

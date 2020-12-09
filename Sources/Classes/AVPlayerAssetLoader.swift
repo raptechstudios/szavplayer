@@ -33,16 +33,13 @@ public class AVPlayerAssetLoader: NSObject {
         SZLogInfo("deinit")
     }
 
-    public func loadAsset(isLocalURL: Bool = false, completion: @escaping (AVURLAsset) -> Void) {
+    public func loadAsset(shouldCacheResource: Bool, completion: @escaping (AVURLAsset) -> Void) {
         var asset: AVURLAsset
-        if isLocalURL {
-            asset = AVURLAsset(url: url)
-        } else if let urlWithSchema = url.withScheme(SZAVPlayerItemScheme) {
+        if shouldCacheResource, let urlWithSchema = url.withScheme(SZAVPlayerItemScheme) {
             asset = AVURLAsset(url: urlWithSchema)
             asset.resourceLoader.setDelegate(self, queue: loaderQueue)
         } else {
-            assertionFailure("URL schema is empty, please make sure to use the correct initilization func.")
-            return
+            asset = AVURLAsset(url: url)
         }
 
         asset.loadValuesAsynchronously(forKeys: ["playable"]) {
@@ -51,7 +48,6 @@ public class AVPlayerAssetLoader: NSObject {
 
         urlAsset = asset
     }
-
 }
 
 // MARK: - Actions

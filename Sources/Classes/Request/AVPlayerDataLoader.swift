@@ -56,7 +56,7 @@ class AVPlayerDataLoader: NSObject {
         var signalProducers: [SignalProducer<Data, Error>] = []
 
         let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
-        let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
+//        let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
 //        print("stored local ranges: \(ranges)")
         if !useCache || localFileInfos.isEmpty {
             signalProducers.append(remoteRequestProducer(range: requestedRange))
