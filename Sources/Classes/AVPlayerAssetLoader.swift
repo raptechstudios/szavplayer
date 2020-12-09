@@ -46,9 +46,7 @@ public class AVPlayerAssetLoader: NSObject {
         }
 
         asset.loadValuesAsynchronously(forKeys: ["playable"]) {
-            DispatchQueue.main.async {
-                completion(asset)
-            }
+            completion(asset)
         }
 
         urlAsset = asset
