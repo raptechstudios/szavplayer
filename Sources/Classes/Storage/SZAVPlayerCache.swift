@@ -40,31 +40,23 @@ public class SZAVPlayerCache: NSObject {
         trimCache()
     }
 
-    public func cleanCache() {
+    @discardableResult
+    public func cleanCache() -> Int64 {
         SZAVPlayerDatabase.shared.cleanData()
-        SZAVPlayerFileSystem.cleanCachedFiles()
+        let cleanedSize = SZAVPlayerFileSystem.cleanCachedFiles()
+        return cleanedSize
     }
 
     public func trimCache() {
         DispatchQueue.global(qos: .background).async {
             let directory = SZAVPlayerFileSystem.cacheDirectory
-            let allFiles: [URL] = SZAVPlayerFileSystem.allFiles(path: directory)
-            var totalFileSize: Int64 = 0
-            for file in allFiles {
-                if let attributes = SZAVPlayerFileSystem.attributes(url: file.path),
-                    let fileSize = attributes[FileAttributeKey.size] as? Int64
-                {
-                    totalFileSize += fileSize
-                }
-            }
-
+            var totalFileSize = SZAVPlayerFileSystem.sizeForDirectory(directory)
             totalFileSize /= 1024 * 1024
             if totalFileSize >= self.maxCacheSize {
                 SZAVPlayerDatabase.shared.trimData()
             }
         }
     }
-
 }
 
 // MARK: - Getter

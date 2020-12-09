@@ -92,13 +92,15 @@ extension SZAVPlayerFileSystem {
         return cacheDirectory.appendingPathComponent(fileName)
     }
 
-    static func cleanCachedFiles() {
+    @discardableResult
+    static func cleanCachedFiles() -> Int64 {
+        let size = sizeForDirectory(SZAVPlayerFileSystem.cacheDirectory)
         let allCachedFiles = allFiles(path: SZAVPlayerFileSystem.cacheDirectory)
         for file in allCachedFiles {
             delete(url: file)
         }
+        return size
     }
-
 }
 
 // MARK: - Getter
@@ -134,6 +136,19 @@ extension SZAVPlayerFileSystem {
             SZLogError("\(error)")
             return []
         }
+    }
+
+    static func sizeForDirectory(_ directoryUrl: URL) -> Int64 {
+        let allFiles: [URL] = SZAVPlayerFileSystem.allFiles(path: directoryUrl)
+        var totalFileSize: Int64 = 0
+        for file in allFiles {
+            if let attributes = SZAVPlayerFileSystem.attributes(url: file.path),
+                let fileSize = attributes[FileAttributeKey.size] as? Int64
+            {
+                totalFileSize += fileSize
+            }
+        }
+        return totalFileSize
     }
 
     static func attributes(url: String) -> [FileAttributeKey : Any]? {
