@@ -76,7 +76,7 @@ extension SZAVPlayerDatabase {
 
         // Here we should update accessed field to support LRU cache mechanism
         if let contentInfo = info {
-            print("previous access date: \(Date(timeIntervalSince1970: TimeInterval(contentInfo.accessed)))")
+//            print("previous access date: \(Date(timeIntervalSince1970: TimeInterval(contentInfo.accessed)))")
             dbQueue.inQueue { (db) in
                 let sql = "UPDATE \(SZAVPlayerContentInfo.tableName) SET accessed = ? WHERE uniqueID = ?"
                 let accessed = Int64(Date().timeIntervalSince1970)

@@ -57,7 +57,7 @@ class AVPlayerDataLoader: NSObject {
 
         let localFileInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let ranges = localFileInfos.map { $0.startOffset ..< $0.startOffset + $0.loadedByteLength }
-        print("stored local ranges: \(ranges)")
+//        print("stored local ranges: \(ranges)")
         if !useCache || localFileInfos.isEmpty {
             signalProducers.append(remoteRequestProducer(range: requestedRange))
         } else {
@@ -129,7 +129,7 @@ extension AVPlayerDataLoader {
         guard intersectionLength > 0 else { return .empty }
 
         let localFileRequestRange = intersectionStart - localFileStartOffset..<intersectionEnd - localFileStartOffset
-        print("addLocalRequest \(intersectionStart ..< intersectionEnd)")
+//        print("addLocalRequest \(intersectionStart ..< intersectionEnd)")
 
         startOffset = intersectionEnd
         let producer = localRequestProducer(range: localFileRequestRange, fileInfo: fileInfo)
@@ -138,7 +138,7 @@ extension AVPlayerDataLoader {
         let recoverableProducer: SignalProducer<Data, Error> = producer.flatMapError { [weak self] _ in
             SZAVPlayerDatabase.shared.deleteLocalFileInfo(id: fileInfo.id)
             guard let strongSelf = self else { return .empty}
-            print("recovering")
+//            print("recovering")
             return strongSelf.remoteRequestProducer(range: intersectionStart..<intersectionEnd)
         }
         return recoverableProducer
@@ -165,7 +165,7 @@ extension AVPlayerDataLoader {
     }
 
     func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
-        print("addRemoteRequest \(range)")
+//        print("addRemoteRequest \(range)")
         let producer: SignalProducer<Data, Error> = SignalProducer { [url, callbackQueue] observer, lifetime in
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -195,11 +195,9 @@ extension AVPlayerDataLoader {
             let task = session.dataTask(with: request)
             
             lifetime.observeEnded {
-                print("task.cancel()")
                 task.cancel()
             }
             task.resume()
-            print("task started")
         }
         
         if useCache {
@@ -211,7 +209,7 @@ extension AVPlayerDataLoader {
                         return
                     }
                     SZAVPlayerCache.shared.save(uniqueID: strongSelf.uniqueID, mediaData: mediaData, startOffset: range.lowerBound)
-                    print("save \(mediaData.count) bytes")
+//                    print("save \(mediaData.count) bytes")
                     self?.mediaData = nil
                 } value: { [weak self] data in
                     self?.mediaData?.append(data)

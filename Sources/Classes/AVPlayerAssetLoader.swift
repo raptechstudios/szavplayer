@@ -70,12 +70,12 @@ extension AVPlayerAssetLoader {
             return false
         }
 
-        print("* informationRequest")
+//        print("* informationRequest")
         
         // use cached info first
         if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-            print("* informationRequest finish (local))")
+//            print("* informationRequest finish (local))")
             loadingRequest.finishLoading()
 
             return true
@@ -118,7 +118,7 @@ extension AVPlayerAssetLoader {
 
             if let error = error {
                 SZLogError("Failed with error: \(String(describing: error))")
-                print("* informationRequest finish (error))")
+//                print("* informationRequest finish (error))")
                 loadingRequest.finishLoading(with: error)
                 return
             }
@@ -132,7 +132,7 @@ extension AVPlayerAssetLoader {
                     SZAVPlayerDatabase.shared.update(contentInfo: info)
                 }
                 self.fillInWithRemoteResponse(infoRequest, response: response)
-                print("* informationRequest finish (\(response.sz_expectedContentLength))")
+//                print("* informationRequest finish (\(response.sz_expectedContentLength))")
                 loadingRequest.finishLoading()
             }
 
@@ -155,7 +155,7 @@ extension AVPlayerAssetLoader {
         let requestedRange = lowerBound..<upperBound
         
         let useCache = pendingRequests.isEmpty
-        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
+//        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
         
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
@@ -168,13 +168,13 @@ extension AVPlayerAssetLoader {
             switch event {
             case .data(let data):
                 avDataRequest.respond(with: data)
-                print("dataRequest loaded \(Int64(data.count)) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
+//                print("dataRequest loaded \(Int64(data.count)) (\(Unmanaged.passUnretained(avDataRequest).toOpaque()))")
             case .finish(let error):
                 if let error = error {
-                    print("* dataRequest finish (error) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
+//                    print("* dataRequest finish (error) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
                     loadingRequest.finishLoading(with: error)
                 } else {
-                    print("* dataRequest finish (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
+//                    print("* dataRequest finish (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
                     loadingRequest.finishLoading()
                 }
                 strongSelf.removePendingRequest(for: loadingRequest)
@@ -197,7 +197,7 @@ extension AVPlayerAssetLoader {
     @discardableResult
     private func removePendingRequest(for loadingRequest: AVAssetResourceLoadingRequest) -> SZAVPlayerRequest? {
         guard let requestIndex = pendingRequests.firstIndex(where: { $0.loadingRequest === loadingRequest }) else {
-            print("ERROR")
+            assertionFailure("trying to remove loadingRequest, which is not in pendingRequests")
             return nil
         }
         return pendingRequests.remove(at: requestIndex)
@@ -243,10 +243,10 @@ extension AVPlayerAssetLoader: AVAssetResourceLoaderDelegate {
     public func resourceLoader(_ resourceLoader: AVAssetResourceLoader,
                                didCancel loadingRequest: AVAssetResourceLoadingRequest)
     {
-        print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset)) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
+//        print("resourceLoader didCancel loadingRequest (offset: \(loadingRequest.dataRequest!.currentOffset)) (\(Unmanaged.passUnretained(loadingRequest.dataRequest!).toOpaque()))")
         let request = removePendingRequest(for: loadingRequest)
         request?.cancel()
-        print("resourceLoader didCancel after")
+//        print("resourceLoader didCancel after")
     }
 
 }
