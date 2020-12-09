@@ -148,7 +148,7 @@ extension AVPlayerAssetLoader {
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
         
-        let useCache = pendingRequests.isEmpty
+        let useCache = true //pendingRequests.isEmpty
 //        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
         
         let loader = AVPlayerDataLoader(
