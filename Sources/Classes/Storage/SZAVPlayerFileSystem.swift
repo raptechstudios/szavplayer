@@ -92,14 +92,11 @@ extension SZAVPlayerFileSystem {
         return cacheDirectory.appendingPathComponent(fileName)
     }
 
-    @discardableResult
-    static func cleanCachedFiles() -> Int64 {
-        let size = sizeForDirectory(SZAVPlayerFileSystem.cacheDirectory)
+    static func cleanCachedFiles() {
         let allCachedFiles = allFiles(path: SZAVPlayerFileSystem.cacheDirectory)
         for file in allCachedFiles {
             delete(url: file)
         }
-        return size
     }
 }
 

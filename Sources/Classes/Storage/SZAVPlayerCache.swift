@@ -38,11 +38,13 @@ public class SZAVPlayerCache: NSObject {
         trimCache()
     }
 
-    @discardableResult
-    public func cleanCache() -> Int64 {
+    public func cacheSize() -> Int64 {
+        return SZAVPlayerFileSystem.sizeForDirectory(SZAVPlayerFileSystem.cacheDirectory)
+    }
+    
+    public func cleanCache() {
         SZAVPlayerDatabase.shared.cleanData()
-        let cleanedSize = SZAVPlayerFileSystem.cleanCachedFiles()
-        return cleanedSize
+        SZAVPlayerFileSystem.cleanCachedFiles()
     }
 
     public func trimCache() {
