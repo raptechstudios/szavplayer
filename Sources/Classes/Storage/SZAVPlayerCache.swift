@@ -10,20 +10,18 @@ public class SZAVPlayerCache: NSObject {
 
     public static let shared: SZAVPlayerCache = SZAVPlayerCache()
 
-    private var maxCacheSize: Int64 = 0
+    private var maxCacheSize: Int64 = 500
 
     override init() {
         super.init()
-
-        setup(maxCacheSize: 100)
-        trimCache()
+        SZAVPlayerFileSystem.createCacheDirectory()
     }
 
     /// Setup
     /// - Parameter maxCacheSize: Unit: MB
     public func setup(maxCacheSize: Int64) {
         self.maxCacheSize = maxCacheSize
-        SZAVPlayerFileSystem.createCacheDirectory()
+        trimCache()
     }
 
     public func save(uniqueID: String, mediaData: Data, startOffset: Int64) {
