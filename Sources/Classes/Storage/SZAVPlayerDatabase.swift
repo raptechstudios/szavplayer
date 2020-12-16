@@ -40,22 +40,31 @@ public class SZAVPlayerDatabase: NSObject {
         }
     }
 
-    public func trimData() {
+    public func trimOwnData() {
         DispatchQueue.global(qos: .background).async {
-            let infos = self.expiredContentInfos()
-            for info in infos {
-                self.deleteContentInfo(uniqueID: info.uniqueID)
-
-                let fileInfos = self.localFileInfos(uniqueID: info.uniqueID)
-                for fileInfo in fileInfos {
-                    let fileURL = SZAVPlayerFileSystem.localFilePath(fileName: fileInfo.localFileName)
-                    SZAVPlayerFileSystem.delete(url: fileURL)
-                }
-                self.deleteLocalFileInfo(uniqueID: info.uniqueID)
-            }
+            let infos = self.expiredOwnContentInfos()
+            self.deleteAllData(for: infos)
         }
     }
+    public func trimOthersData() {
+        DispatchQueue.global(qos: .background).async {
+            let infos = self.expiredOthersContentInfos()
+            self.deleteAllData(for: infos)
+        }
+    }
+    
+    private func deleteAllData(for infos: [SZAVPlayerContentInfo]) {
+        for info in infos {
+            self.deleteContentInfo(uniqueID: info.uniqueID)
 
+            let fileInfos = self.localFileInfos(uniqueID: info.uniqueID)
+            for fileInfo in fileInfos {
+                let fileURL = SZAVPlayerFileSystem.localFilePath(fileName: fileInfo.localFileName)
+                SZAVPlayerFileSystem.delete(url: fileURL)
+            }
+            self.deleteLocalFileInfo(uniqueID: info.uniqueID)
+        }
+    }
 }
 
 // MARK: - ContentInfo
@@ -109,10 +118,10 @@ extension SZAVPlayerDatabase {
         }
     }
 
-    private func expiredContentInfos() -> [SZAVPlayerContentInfo] {
+    private func expiredOwnContentInfos() -> [SZAVPlayerContentInfo] {
         var expiredInfos: [SZAVPlayerContentInfo] = []
         dbQueue.inQueue { (db) in
-            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) ORDER BY accessed ASC LIMIT 5"
+            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) WHERE isOwn = 1 ORDER BY accessed ASC LIMIT 5"
             let infos = db.query(sql: sql)
             if let infoDict = infos.first,
                 let tmpInfo = SZAVPlayerContentInfo.deserialize(data: infoDict)
@@ -124,6 +133,32 @@ extension SZAVPlayerDatabase {
         return expiredInfos
     }
 
+    private func expiredOthersContentInfos() -> [SZAVPlayerContentInfo] {
+        var expiredInfos: [SZAVPlayerContentInfo] = []
+        dbQueue.inQueue { (db) in
+            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) WHERE isOwn = 0 ORDER BY accessed ASC LIMIT 5"
+            let infos = db.query(sql: sql)
+            if let infoDict = infos.first,
+                let tmpInfo = SZAVPlayerContentInfo.deserialize(data: infoDict)
+            {
+                expiredInfos.append(tmpInfo)
+            }
+        }
+
+        return expiredInfos
+    }
+    
+    func ownContentInfos() -> [SZAVPlayerContentInfo] {
+        var ownContentInfos: [SZAVPlayerContentInfo] = []
+        dbQueue.inQueue { (db) in
+            let sql = "SELECT * FROM \(SZAVPlayerContentInfo.tableName) WHERE isOwn = 1"
+            let infos = db.query(sql: sql)
+            ownContentInfos = infos.flatMap(SZAVPlayerContentInfo.deserialize(data:))
+        }
+
+        return ownContentInfos
+    }
+    
     private func createContentInfoTable() {
         let tableName = SZAVPlayerContentInfo.tableName
         let sqlQuerys = [
