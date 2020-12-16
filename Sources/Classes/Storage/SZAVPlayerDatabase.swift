@@ -90,11 +90,11 @@ extension SZAVPlayerDatabase {
     public func update(contentInfo: SZAVPlayerContentInfo) {
         dbQueue.inQueue { (db) in
             let sql = "INSERT OR REPLACE INTO \(SZAVPlayerContentInfo.tableName) " +
-            "(uniqueID, mimeType, contentLength, updated, accessed, isByteRangeAccessSupported) " +
-            "values(?, ?, ?, ?, ?, ?)"
+            "(uniqueID, mimeType, contentLength, updated, accessed, isByteRangeAccessSupported, isOwn) " +
+            "values(?, ?, ?, ?, ?, ?, ?)"
             let updated = Int64(Date().timeIntervalSince1970)
             let accessed = Int64(Date().timeIntervalSince1970)
-            let params: [Any] = [contentInfo.uniqueID, contentInfo.mimeType, contentInfo.contentLength, updated, accessed, contentInfo.isByteRangeAccessSupported]
+            let params: [Any] = [contentInfo.uniqueID, contentInfo.mimeType, contentInfo.contentLength, updated, accessed, contentInfo.isByteRangeAccessSupported, contentInfo.isOwn]
             db.execute(sql: sql, params: params)
         }
     }
@@ -145,6 +145,10 @@ extension SZAVPlayerDatabase {
 
         if !dbQueue.columnExist(columnName: "isByteRangeAccessSupported", tableName: SZAVPlayerContentInfo.tableName) {
             let sql = "ALTER TABLE \(SZAVPlayerContentInfo.tableName) ADD COLUMN isByteRangeAccessSupported INTEGER DEFAULT 1"
+            dbQueue.execute(sql: sql)
+        }
+        if !dbQueue.columnExist(columnName: "isOwn", tableName: SZAVPlayerContentInfo.tableName) {
+            let sql = "ALTER TABLE \(SZAVPlayerContentInfo.tableName) ADD COLUMN isOwn INTEGER DEFAULT 0"
             dbQueue.execute(sql: sql)
         }
     }

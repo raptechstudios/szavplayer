@@ -17,6 +17,7 @@ public struct SZAVPlayerContentInfo: SZBaseModel {
     var updated: Int64 = 0
     var accessed: Int64 = 0
     var isByteRangeAccessSupported: Bool = false
+    var isOwn: Bool
 
     static func isNotExpired(updated: Int64) -> Bool {
         let expiredTimeInterval = 3600
@@ -38,6 +39,9 @@ extension SZAVPlayerContentInfo: Decodable {
 
         let rangeAccessSupportedValue = try values.decode(Int.self, forKey: .isByteRangeAccessSupported)
         isByteRangeAccessSupported = rangeAccessSupportedValue == 1 ? true : false
+        
+        let isOwn = try values.decode(Int.self, forKey: .isOwn)
+        self.isOwn = isOwn == 1 ? true : false
     }
 
 }

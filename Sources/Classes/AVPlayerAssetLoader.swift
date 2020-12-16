@@ -16,6 +16,7 @@ public class AVPlayerAssetLoader: NSObject {
 
     public var uniqueID: String = "defaultUniqueID"
     public let url: URL
+    public let isOwn: Bool
     public var urlAsset: AVURLAsset?
 
     private let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.loaderQueue")
@@ -24,8 +25,9 @@ public class AVPlayerAssetLoader: NSObject {
 
     private var isCancelled: Bool = false
 
-    public init(url: URL) {
+    public init(url: URL, isOwn: Bool) {
         self.url = url
+        self.isOwn = isOwn
         super.init()
     }
 
@@ -119,10 +121,13 @@ extension AVPlayerAssetLoader {
 
             if let response = response {
                 if let mimeType = response.mimeType {
-                    let info = SZAVPlayerContentInfo(uniqueID: self.uniqueID,
-                                                     mimeType: mimeType,
-                                                     contentLength: response.sz_expectedContentLength,
-                                                     isByteRangeAccessSupported: response.sz_isByteRangeAccessSupported)
+                    let info = SZAVPlayerContentInfo(
+                        uniqueID: self.uniqueID,
+                        mimeType: mimeType,
+                        contentLength: response.sz_expectedContentLength,
+                        isByteRangeAccessSupported: response.sz_isByteRangeAccessSupported,
+                        isOwn: self.isOwn
+                    )
                     SZAVPlayerDatabase.shared.update(contentInfo: info)
                 }
                 self.fillInWithRemoteResponse(infoRequest, response: response)
