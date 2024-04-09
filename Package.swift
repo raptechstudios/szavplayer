@@ -21,7 +21,8 @@ let package = Package(
         // Targets can depend on other targets in this package, and on products in packages which this package depends on.
         .target(
             name: "SZAVPlayer",
-            path: "Sources"
+            path: "Source",
+            resources: [.copy("PrivacyInfo.xcprivacy")]
         ),
     ],
     swiftLanguageVersions: [.v5]

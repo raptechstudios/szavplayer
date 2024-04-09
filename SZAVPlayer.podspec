@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'SZAVPlayer'
-  s.version          = '1.2.0'
+  s.version          = '1.2.1'
   s.summary          = 'Swift AVPlayer, based on AVAssetResourceLoaderDelegate, support cache.'
 
 # This description is used to generate tags and improve search results.
@@ -27,6 +27,7 @@ Pod::Spec.new do |s|
   s.author           = { 'eroscai' => 'csz0102@gmail.com' }
   s.source           = { :git => 'https://github.com/eroscai/SZAVPlayer.git', :tag => s.version.to_s }
   # s.social_media_url = 'https://twitter.com/<TWITTER_USERNAME>'
+  s.resources = 'Sources/PrivacyInfo.xcprivacy'
 
   s.ios.deployment_target = '10.0'
   s.swift_version         = '5.0'
