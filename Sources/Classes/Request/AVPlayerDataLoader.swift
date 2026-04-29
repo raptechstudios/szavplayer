@@ -23,18 +23,23 @@ class AVPlayerDataLoader: NSObject {
     private let requestedRange: SZAVPlayerRange
     private let useCache: Bool
     private var mediaData: Data?
-    
+
     private var cancelled: Bool = false
     var disposable: Disposable?
-    
+
     private let eventHandler: (AVPlayerDataLoaderEvent) -> Void
-    
+    /// Called once on the first remote response (across all sub-requests).
+    /// Lets callers (e.g. prefetch) populate `SZAVPlayerContentInfo` from headers.
+    private let onFirstResponse: ((URLResponse) -> Void)?
+    private var didReceiveFirstResponse: Bool = false
+
     init(
         uniqueID: String,
         url: URL,
         range: SZAVPlayerRange,
         callbackQueue: DispatchQueue,
         useCache: Bool,
+        onFirstResponse: ((URLResponse) -> Void)? = nil,
         eventHandler: @escaping (AVPlayerDataLoaderEvent) -> Void
     ) {
         self.uniqueID = uniqueID
@@ -42,6 +47,7 @@ class AVPlayerDataLoader: NSObject {
         self.requestedRange = range
         self.callbackQueue = callbackQueue
         self.useCache = useCache
+        self.onFirstResponse = onFirstResponse
         self.eventHandler = eventHandler
         super.init()
     }
@@ -171,7 +177,14 @@ extension AVPlayerDataLoader {
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let sessionDelegate = URLSessionDataDelegateProxy()
             let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)
-            
+
+            sessionDelegate.didReceiveResponse = { [weak self, callbackQueue] response in
+                callbackQueue.async {
+                    guard let self, !self.didReceiveFirstResponse else { return }
+                    self.didReceiveFirstResponse = true
+                    self.onFirstResponse?(response)
+                }
+            }
             sessionDelegate.didReceiveData = { [callbackQueue] data in
                 callbackQueue.async {
                     observer.send(value: data)

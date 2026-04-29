@@ -331,22 +331,19 @@ fileprivate extension URLResponse {
 // MARK: - Prefetch
 
 public final class AVPlayerPrefetchHandle {
-    private let task: URLSessionDataTask
-    fileprivate init(task: URLSessionDataTask) { self.task = task }
-    public func cancel() { task.cancel() }
+    private let loader: AVPlayerDataLoader
+    fileprivate init(loader: AVPlayerDataLoader) { self.loader = loader }
+    public func cancel() { loader.cancel() }
 }
 
 extension AVPlayerAssetLoader {
 
-    private static let prefetchSession: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration)
-    }()
-
     /// Downloads the first `byteCount` bytes of `url` into SZAVPlayer's disk cache.
-    /// When a player later opens the same URL with the same `uniqueID`, its asset loader
-    /// serves those bytes from cache without a network round-trip.
+    /// Reuses `AVPlayerDataLoader`, so cached chunks are skipped (only missing
+    /// sub-ranges are fetched), and partial bytes received before cancel/error are
+    /// still persisted to the cache. Captures the first response to populate
+    /// `SZAVPlayerContentInfo`, so the next playback's `handleContentInfoRequest`
+    /// hits cache without an extra network round-trip.
     @discardableResult
     public static func prefetch(
         url: URL,
@@ -357,6 +354,7 @@ extension AVPlayerAssetLoader {
     ) -> AVPlayerPrefetchHandle? {
         guard byteCount > 0 else { return nil }
 
+        // Fast-exit when the requested prefix is already fully cached.
         let infos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
         let needed = min(byteCount, knownContentLength ?? Int64.max)
@@ -365,24 +363,18 @@ extension AVPlayerAssetLoader {
             return nil
         }
 
-        var request = URLRequest(url: url)
-        request.setValue("bytes=0-\(byteCount - 1)", forHTTPHeaderField: "Range")
         print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=0..<\(byteCount) url=\(url.lastPathComponent)")
 
-        let task = prefetchSession.dataTask(with: request) { data, response, error in
-            if let error = error {
-                completion?(error)
-                return
-            }
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode)
-            {
-                completion?(NSError(domain: "SZAVPlayerPrefetch", code: httpResponse.statusCode))
-                return
-            }
-            if let response = response, let mimeType = response.mimeType,
-               SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID) == nil
-            {
+        let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
+        let loader = AVPlayerDataLoader(
+            uniqueID: uniqueID,
+            url: url,
+            range: 0..<byteCount,
+            callbackQueue: loaderQueue,
+            useCache: true,
+            onFirstResponse: { response in
+                guard SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID) == nil,
+                      let mimeType = response.mimeType else { return }
                 let info = SZAVPlayerContentInfo(
                     uniqueID: uniqueID,
                     mimeType: mimeType,
@@ -392,13 +384,13 @@ extension AVPlayerAssetLoader {
                 )
                 SZAVPlayerDatabase.shared.update(contentInfo: info)
             }
-            if let data = data, data.count > 0 {
-                SZAVPlayerCache.shared.save(uniqueID: uniqueID, mediaData: data, startOffset: 0)
+        ) { event in
+            if case .finish(let error) = event {
+                completion?(error)
             }
-            completion?(nil)
         }
-        task.resume()
-        return AVPlayerPrefetchHandle(task: task)
+        loader.start()
+        return AVPlayerPrefetchHandle(loader: loader)
     }
 
 }
