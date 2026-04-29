@@ -70,14 +70,17 @@ extension AVPlayerAssetLoader {
         
         // use cached info first
         if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
+            print("⏱️ [FeedPerf] [Cache] contentInfo HIT uid=\(uniqueID) length=\(contentInfo.contentLength)")
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-//            print("* informationRequest finish (local))")
             loadingRequest.finishLoading()
 
             return true
         }
 
+        print("⏱️ [FeedPerf] [Cache] contentInfo MISS uid=\(uniqueID) → network")
         let request = contentInfoRequest(loadingRequest: loadingRequest)
+        let rangeHeader = request.value(forHTTPHeaderField: "Range") ?? "none"
+        print("⏱️ [FeedPerf] [Cache] NETWORK contentInfo range=\(rangeHeader) url=\(url.lastPathComponent)")
         let configuration = URLSessionConfiguration.default
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let session = URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
@@ -152,9 +155,13 @@ extension AVPlayerAssetLoader {
         let length = Int64(avDataRequest.requestedLength)
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
-        
+
         let useCache = true //pendingRequests.isEmpty
-//        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
+
+        let cachedInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
+        let cachedRanges = cachedInfos.map { $0.startOffset..<($0.startOffset + $0.loadedByteLength) }
+        let fullyCovered = cachedInfos.contains { $0.startOffset <= lowerBound && ($0.startOffset + $0.loadedByteLength) >= upperBound }
+        print("⏱️ [FeedPerf] [Cache] dataRequest \(requestedRange) cached=\(cachedRanges) covered=\(fullyCovered)")
         
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
@@ -317,6 +324,81 @@ fileprivate extension URLResponse {
         }
 
         return false
+    }
+
+}
+
+// MARK: - Prefetch
+
+public final class AVPlayerPrefetchHandle {
+    private let task: URLSessionDataTask
+    fileprivate init(task: URLSessionDataTask) { self.task = task }
+    public func cancel() { task.cancel() }
+}
+
+extension AVPlayerAssetLoader {
+
+    private static let prefetchSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Downloads the first `byteCount` bytes of `url` into SZAVPlayer's disk cache.
+    /// When a player later opens the same URL with the same `uniqueID`, its asset loader
+    /// serves those bytes from cache without a network round-trip.
+    @discardableResult
+    public static func prefetch(
+        url: URL,
+        uniqueID: String,
+        byteCount: Int64,
+        isOwn: Bool,
+        completion: ((Error?) -> Void)? = nil
+    ) -> AVPlayerPrefetchHandle? {
+        guard byteCount > 0 else { return nil }
+
+        let infos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
+        let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
+        let needed = min(byteCount, knownContentLength ?? Int64.max)
+        if infos.contains(where: { $0.startOffset == 0 && $0.loadedByteLength >= needed }) {
+            completion?(nil)
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("bytes=0-\(byteCount - 1)", forHTTPHeaderField: "Range")
+        print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=0..<\(byteCount) url=\(url.lastPathComponent)")
+
+        let task = prefetchSession.dataTask(with: request) { data, response, error in
+            if let error = error {
+                completion?(error)
+                return
+            }
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode)
+            {
+                completion?(NSError(domain: "SZAVPlayerPrefetch", code: httpResponse.statusCode))
+                return
+            }
+            if let response = response, let mimeType = response.mimeType,
+               SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID) == nil
+            {
+                let info = SZAVPlayerContentInfo(
+                    uniqueID: uniqueID,
+                    mimeType: mimeType,
+                    contentLength: response.sz_expectedContentLength,
+                    isByteRangeAccessSupported: response.sz_isByteRangeAccessSupported,
+                    isOwn: isOwn
+                )
+                SZAVPlayerDatabase.shared.update(contentInfo: info)
+            }
+            if let data = data, data.count > 0 {
+                SZAVPlayerCache.shared.save(uniqueID: uniqueID, mediaData: data, startOffset: 0)
+            }
+            completion?(nil)
+        }
+        task.resume()
+        return AVPlayerPrefetchHandle(task: task)
     }
 
 }

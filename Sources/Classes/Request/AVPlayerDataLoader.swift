@@ -165,7 +165,7 @@ extension AVPlayerDataLoader {
     }
 
     func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
-//        print("addRemoteRequest \(range)")
+        print("⏱️ [FeedPerf] [Cache] NETWORK fetch range=\(range) url=\(url.lastPathComponent)")
         let producer: SignalProducer<Data, Error> = SignalProducer { [url, callbackQueue] observer, lifetime in
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
