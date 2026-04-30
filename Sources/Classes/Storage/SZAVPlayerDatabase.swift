@@ -71,6 +71,57 @@ public class SZAVPlayerDatabase: NSObject {
 
 extension SZAVPlayerDatabase {
 
+    /// Returns true when a contiguous prefix of at least `byteLength` bytes (capped to known content length)
+    /// is already cached for `uniqueID`. Mirrors `AVPlayerAssetLoader.prefetch` fast-exit logic.
+    public func hasCachedPrefix(uniqueID: String, byteLength: Int64) -> Bool {
+        let infos = localFileInfos(uniqueID: uniqueID)
+        let knownLength = contentInfo(uniqueID: uniqueID)?.contentLength
+        let needed = min(byteLength, knownLength ?? Int64.max)
+        return infos.contains(where: { $0.startOffset == 0 && $0.loadedByteLength >= needed })
+    }
+
+    /// Detects whether the cached MP4/MOV file has its `moov` atom at the front (faststart).
+    /// Returns nil when not enough cached prefix is available to decide.
+    public func isFaststart(uniqueID: String) -> Bool? {
+        let infos = localFileInfos(uniqueID: uniqueID)
+        guard let head = infos.first(where: { $0.startOffset == 0 }), head.loadedByteLength >= 16 else {
+            return nil
+        }
+        let url = SZAVPlayerFileSystem.localFilePath(fileName: head.localFileName)
+        let readLength = min(head.loadedByteLength, 64)
+        guard let data = SZAVPlayerFileSystem.read(url: url, range: 0..<readLength) else { return nil }
+        return Self.detectMoovBeforeMdat(in: data)
+    }
+
+    private static func detectMoovBeforeMdat(in data: Data) -> Bool? {
+        var offset = 0
+        while offset + 8 <= data.count {
+            let size32: UInt32 = data.subdata(in: offset..<offset+4).withUnsafeBytes { ptr in
+                UInt32(bigEndian: ptr.load(as: UInt32.self))
+            }
+            let typeData = data.subdata(in: offset+4..<offset+8)
+            let type = String(data: typeData, encoding: .ascii) ?? ""
+            if type == "moov" { return true }
+            if type == "mdat" { return false }
+
+            let advance: Int
+            if size32 == 1 {
+                guard offset + 16 <= data.count else { return nil }
+                let size64: UInt64 = data.subdata(in: offset+8..<offset+16).withUnsafeBytes { ptr in
+                    UInt64(bigEndian: ptr.load(as: UInt64.self))
+                }
+                advance = Int(size64)
+            } else if size32 >= 8 {
+                advance = Int(size32)
+            } else {
+                return nil
+            }
+            guard advance >= 8 else { return nil }
+            offset += advance
+        }
+        return nil
+    }
+
     public func contentInfo(uniqueID: String) -> SZAVPlayerContentInfo? {
         var info: SZAVPlayerContentInfo?
         dbQueue.inQueue { (db) in

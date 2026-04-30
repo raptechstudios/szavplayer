@@ -332,6 +332,15 @@ fileprivate extension URLResponse {
 
 public final class AVPlayerPrefetchHandle {
     private let loader: AVPlayerDataLoader
+    private let bytesLock = NSLock()
+    private var _bytesLoaded: Int64 = 0
+    public var bytesLoaded: Int64 {
+        bytesLock.lock(); defer { bytesLock.unlock() }
+        return _bytesLoaded
+    }
+    fileprivate func addBytes(_ count: Int64) {
+        bytesLock.lock(); _bytesLoaded += count; bytesLock.unlock()
+    }
     fileprivate init(loader: AVPlayerDataLoader) { self.loader = loader }
     public func cancel() { loader.cancel() }
 }
@@ -366,6 +375,7 @@ extension AVPlayerAssetLoader {
         print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=0..<\(byteCount) url=\(url.lastPathComponent)")
 
         let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
+        var handleRef: AVPlayerPrefetchHandle?
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,
@@ -385,12 +395,17 @@ extension AVPlayerAssetLoader {
                 SZAVPlayerDatabase.shared.update(contentInfo: info)
             }
         ) { event in
-            if case .finish(let error) = event {
+            switch event {
+            case .data(let data):
+                handleRef?.addBytes(Int64(data.count))
+            case .finish(let error):
                 completion?(error)
             }
         }
+        let handle = AVPlayerPrefetchHandle(loader: loader)
+        handleRef = handle
         loader.start()
-        return AVPlayerPrefetchHandle(loader: loader)
+        return handle
     }
 
 }
