@@ -71,6 +71,11 @@ public class SZAVPlayerDatabase: NSObject {
 
 extension SZAVPlayerDatabase {
 
+    /// Returns the cached content length for `uniqueID`, if known.
+    public func contentLength(uniqueID: String) -> Int64? {
+        return contentInfo(uniqueID: uniqueID)?.contentLength
+    }
+
     /// Returns true when a contiguous prefix of at least `byteLength` bytes (capped to known content length)
     /// is already cached for `uniqueID`. Mirrors `AVPlayerAssetLoader.prefetch` fast-exit logic.
     public func hasCachedPrefix(uniqueID: String, byteLength: Int64) -> Bool {
@@ -78,6 +83,15 @@ extension SZAVPlayerDatabase {
         let knownLength = contentInfo(uniqueID: uniqueID)?.contentLength
         let needed = min(byteLength, knownLength ?? Int64.max)
         return infos.contains(where: { $0.startOffset == 0 && $0.loadedByteLength >= needed })
+    }
+
+    /// Returns true when the requested byte range is already covered by a single contiguous cached chunk.
+    public func hasCachedRange(uniqueID: String, range: Range<Int64>) -> Bool {
+        guard !range.isEmpty else { return true }
+        let infos = localFileInfos(uniqueID: uniqueID)
+        return infos.contains(where: {
+            $0.startOffset <= range.lowerBound && $0.startOffset + $0.loadedByteLength >= range.upperBound
+        })
     }
 
     /// Detects whether the cached MP4/MOV file has its `moov` atom at the front (faststart).

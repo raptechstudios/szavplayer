@@ -362,24 +362,42 @@ extension AVPlayerAssetLoader {
         completion: ((Error?) -> Void)? = nil
     ) -> AVPlayerPrefetchHandle? {
         guard byteCount > 0 else { return nil }
+        return prefetchRange(url: url, uniqueID: uniqueID, range: 0..<byteCount, isOwn: isOwn, completion: completion)
+    }
 
-        // Fast-exit when the requested prefix is already fully cached.
+    /// Downloads the bytes in `range` of `url` into SZAVPlayer's disk cache.
+    /// Same caching/streaming behavior as `prefetch(byteCount:)` but for arbitrary ranges
+    /// (e.g. tail moov atom for non-faststart files).
+    @discardableResult
+    public static func prefetchRange(
+        url: URL,
+        uniqueID: String,
+        range: Range<Int64>,
+        isOwn: Bool,
+        completion: ((Error?) -> Void)? = nil
+    ) -> AVPlayerPrefetchHandle? {
+        guard !range.isEmpty else { return nil }
+
+        // Fast-exit when the requested range is already fully covered by a single cached chunk.
         let infos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
-        let needed = min(byteCount, knownContentLength ?? Int64.max)
-        if infos.contains(where: { $0.startOffset == 0 && $0.loadedByteLength >= needed }) {
+        let upperBound = min(range.upperBound, knownContentLength ?? Int64.max)
+        let needed = range.lowerBound..<upperBound
+        if !needed.isEmpty,
+           infos.contains(where: { $0.startOffset <= needed.lowerBound && $0.startOffset + $0.loadedByteLength >= needed.upperBound })
+        {
             completion?(nil)
             return nil
         }
 
-        print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=0..<\(byteCount) url=\(url.lastPathComponent)")
+        print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=\(range.lowerBound)..<\(range.upperBound) url=\(url.lastPathComponent)")
 
         let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
         var handleRef: AVPlayerPrefetchHandle?
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,
-            range: 0..<byteCount,
+            range: range,
             callbackQueue: loaderQueue,
             useCache: true,
             onFirstResponse: { response in
