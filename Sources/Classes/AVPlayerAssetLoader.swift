@@ -393,7 +393,13 @@ extension AVPlayerAssetLoader {
         print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=\(range.lowerBound)..<\(range.upperBound) url=\(url.lastPathComponent)")
 
         let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
-        var handleRef: AVPlayerPrefetchHandle?
+        // Capture the handle through a weak box so the data-loader's event closure
+        // doesn't keep the handle alive. Without this, the loader retains the closure
+        // which retains the local `var handleRef` storage which strongly retains the
+        // handle — and the handle owns the loader. The cycle survives `cancel()`
+        // because cancelling stops the network but doesn't drop the closure, leaking
+        // ~5–7 MB of loader buffers per cancelled prefetch.
+        let handleBox = HandleBox()
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,
@@ -412,19 +418,23 @@ extension AVPlayerAssetLoader {
                 )
                 SZAVPlayerDatabase.shared.update(contentInfo: info)
             }
-        ) { event in
+        ) { [handleBox] event in
             switch event {
             case .data(let data):
-                handleRef?.addBytes(Int64(data.count))
+                handleBox.handle?.addBytes(Int64(data.count))
             case .finish(let error):
                 completion?(error)
             }
         }
         let handle = AVPlayerPrefetchHandle(loader: loader)
-        handleRef = handle
+        handleBox.handle = handle
         loader.start()
         return handle
     }
+}
+
+private final class HandleBox {
+    weak var handle: AVPlayerPrefetchHandle?
 
 }
 
