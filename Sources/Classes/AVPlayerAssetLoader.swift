@@ -329,12 +329,6 @@ public final class AVPlayerPrefetchHandle {
 
 extension AVPlayerAssetLoader {
 
-    /// Downloads the first `byteCount` bytes of `url` into SZAVPlayer's disk cache.
-    /// Reuses `AVPlayerDataLoader`, so cached chunks are skipped (only missing
-    /// sub-ranges are fetched), and partial bytes received before cancel/error are
-    /// still persisted to the cache. Captures the first response to populate
-    /// `SZAVPlayerContentInfo`, so the next playback's `handleContentInfoRequest`
-    /// hits cache without an extra network round-trip.
     @discardableResult
     public static func prefetch(
         url: URL,
@@ -347,9 +341,6 @@ extension AVPlayerAssetLoader {
         return prefetchRange(url: url, uniqueID: uniqueID, range: 0..<byteCount, isOwn: isOwn, completion: completion)
     }
 
-    /// Downloads the bytes in `range` of `url` into SZAVPlayer's disk cache.
-    /// Same caching/streaming behavior as `prefetch(byteCount:)` but for arbitrary ranges
-    /// (e.g. tail moov atom for non-faststart files).
     @discardableResult
     public static func prefetchRange(
         url: URL,
@@ -360,7 +351,6 @@ extension AVPlayerAssetLoader {
     ) -> AVPlayerPrefetchHandle? {
         guard !range.isEmpty else { return nil }
 
-        // Fast-exit when the requested range is already fully covered by a single cached chunk.
         let infos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
         let upperBound = min(range.upperBound, knownContentLength ?? Int64.max)

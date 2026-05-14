@@ -28,8 +28,6 @@ class AVPlayerDataLoader: NSObject {
     var disposable: Disposable?
     
     private let eventHandler: (AVPlayerDataLoaderEvent) -> Void
-    /// Called once on the first remote response (across all sub-requests).
-    /// Lets callers (e.g. prefetch) populate `SZAVPlayerContentInfo` from headers.
     private let onFirstResponse: ((URLResponse) -> Void)?
     private var didReceiveFirstResponse: Bool = false
 
