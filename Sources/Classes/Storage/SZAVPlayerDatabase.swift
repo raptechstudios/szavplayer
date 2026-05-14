@@ -96,7 +96,7 @@ extension SZAVPlayerDatabase {
             return nil
         }
         let url = SZAVPlayerFileSystem.localFilePath(fileName: head.localFileName)
-        let readLength = min(head.loadedByteLength, 64)
+        let readLength = min(head.loadedByteLength, 128)
         guard let data = SZAVPlayerFileSystem.read(url: url, range: 0..<readLength) else { return nil }
         return Self.detectMoovBeforeMdat(in: data)
     }
