@@ -70,17 +70,13 @@ extension AVPlayerAssetLoader {
         
         // use cached info first
         if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
-            print("⏱️ [FeedPerf] [Cache] contentInfo HIT uid=\(uniqueID) length=\(contentInfo.contentLength)")
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
             loadingRequest.finishLoading()
 
             return true
         }
 
-        print("⏱️ [FeedPerf] [Cache] contentInfo MISS uid=\(uniqueID) → network")
         let request = contentInfoRequest(loadingRequest: loadingRequest)
-        let rangeHeader = request.value(forHTTPHeaderField: "Range") ?? "none"
-        print("⏱️ [FeedPerf] [Cache] NETWORK contentInfo range=\(rangeHeader) url=\(url.lastPathComponent)")
         let configuration = URLSessionConfiguration.default
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         let session = URLSession(configuration: configuration, delegate: nil, delegateQueue: nil)
@@ -158,11 +154,6 @@ extension AVPlayerAssetLoader {
 
         let useCache = true //pendingRequests.isEmpty
 
-        let cachedInfos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
-        let cachedRanges = cachedInfos.map { $0.startOffset..<($0.startOffset + $0.loadedByteLength) }
-        let fullyCovered = cachedInfos.contains { $0.startOffset <= lowerBound && ($0.startOffset + $0.loadedByteLength) >= upperBound }
-        print("⏱️ [FeedPerf] [Cache] dataRequest \(requestedRange) cached=\(cachedRanges) covered=\(fullyCovered)")
-        
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,
@@ -332,15 +323,6 @@ fileprivate extension URLResponse {
 
 public final class AVPlayerPrefetchHandle {
     private let loader: AVPlayerDataLoader
-    private let bytesLock = NSLock()
-    private var _bytesLoaded: Int64 = 0
-    public var bytesLoaded: Int64 {
-        bytesLock.lock(); defer { bytesLock.unlock() }
-        return _bytesLoaded
-    }
-    fileprivate func addBytes(_ count: Int64) {
-        bytesLock.lock(); _bytesLoaded += count; bytesLock.unlock()
-    }
     fileprivate init(loader: AVPlayerDataLoader) { self.loader = loader }
     public func cancel() { loader.cancel() }
 }
@@ -390,16 +372,7 @@ extension AVPlayerAssetLoader {
             return nil
         }
 
-        print("⏱️ [FeedPerf] [Cache] NETWORK prefetch range=\(range.lowerBound)..<\(range.upperBound) url=\(url.lastPathComponent)")
-
         let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
-        // Capture the handle through a weak box so the data-loader's event closure
-        // doesn't keep the handle alive. Without this, the loader retains the closure
-        // which retains the local `var handleRef` storage which strongly retains the
-        // handle — and the handle owns the loader. The cycle survives `cancel()`
-        // because cancelling stops the network but doesn't drop the closure, leaking
-        // ~5–7 MB of loader buffers per cancelled prefetch.
-        let handleBox = HandleBox()
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,
@@ -418,24 +391,15 @@ extension AVPlayerAssetLoader {
                 )
                 SZAVPlayerDatabase.shared.update(contentInfo: info)
             }
-        ) { [handleBox] event in
-            switch event {
-            case .data(let data):
-                handleBox.handle?.addBytes(Int64(data.count))
-            case .finish(let error):
+        ) { event in
+            if case .finish(let error) = event {
                 completion?(error)
             }
         }
         let handle = AVPlayerPrefetchHandle(loader: loader)
-        handleBox.handle = handle
         loader.start()
         return handle
     }
-}
-
-private final class HandleBox {
-    weak var handle: AVPlayerPrefetchHandle?
-
 }
 
 // MARK: - Getter
