@@ -23,10 +23,10 @@ class AVPlayerDataLoader: NSObject {
     private let requestedRange: SZAVPlayerRange
     private let useCache: Bool
     private var mediaData: Data?
-
+    
     private var cancelled: Bool = false
     var disposable: Disposable?
-
+    
     private let eventHandler: (AVPlayerDataLoaderEvent) -> Void
     /// Called once on the first remote response (across all sub-requests).
     /// Lets callers (e.g. prefetch) populate `SZAVPlayerContentInfo` from headers.
@@ -176,7 +176,7 @@ extension AVPlayerDataLoader {
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let sessionDelegate = URLSessionDataDelegateProxy()
             let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)
-
+            
             sessionDelegate.didReceiveResponse = { [weak self, callbackQueue] response in
                 callbackQueue.async {
                     guard let self, !self.didReceiveFirstResponse else { return }

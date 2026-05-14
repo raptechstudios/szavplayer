@@ -151,9 +151,9 @@ extension AVPlayerAssetLoader {
         let length = Int64(avDataRequest.requestedLength)
         let upperBound = lowerBound + length
         let requestedRange = lowerBound..<upperBound
-
+        
         let useCache = true //pendingRequests.isEmpty
-
+        
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
             url: url,

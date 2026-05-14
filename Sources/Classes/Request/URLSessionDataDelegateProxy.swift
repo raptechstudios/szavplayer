@@ -26,7 +26,7 @@ class URLSessionDataDelegateProxy: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         didReceiveData?(data)
     }
-
+    
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         didCompleteWithError?(error)
     }
