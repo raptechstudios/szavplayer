@@ -71,6 +71,71 @@ public class SZAVPlayerDatabase: NSObject {
 
 extension SZAVPlayerDatabase {
 
+    public func contentLength(uniqueID: String) -> Int64? {
+        return contentInfo(uniqueID: uniqueID)?.contentLength
+    }
+
+    public func hasCachedPrefix(uniqueID: String, byteLength: Int64) -> Bool {
+        let knownLength = contentInfo(uniqueID: uniqueID)?.contentLength
+        let needed = min(byteLength, knownLength ?? Int64.max)
+        guard needed > 0 else { return true }
+        return hasCachedRange(uniqueID: uniqueID, range: 0..<needed)
+    }
+
+    public func hasCachedRange(uniqueID: String, range: Range<Int64>) -> Bool {
+        guard !range.isEmpty else { return true }
+        // localFileInfos returns rows ORDER BY startOffset ASC, so walking once is enough
+        // to detect coverage across multiple adjacent or overlapping chunks.
+        let infos = localFileInfos(uniqueID: uniqueID)
+        var covered = range.lowerBound
+        for info in infos {
+            guard info.startOffset <= covered else { return false }
+            covered = max(covered, info.startOffset + info.loadedByteLength)
+            if covered >= range.upperBound { return true }
+        }
+        return false
+    }
+
+    public func isFaststart(uniqueID: String) -> Bool? {
+        let infos = localFileInfos(uniqueID: uniqueID)
+        guard let head = infos.first(where: { $0.startOffset == 0 }), head.loadedByteLength >= 16 else {
+            return nil
+        }
+        let url = SZAVPlayerFileSystem.localFilePath(fileName: head.localFileName)
+        let readLength = min(head.loadedByteLength, 128)
+        guard let data = SZAVPlayerFileSystem.read(url: url, range: 0..<readLength) else { return nil }
+        return Self.detectMoovBeforeMdat(in: data)
+    }
+
+    private static func detectMoovBeforeMdat(in data: Data) -> Bool? {
+        var offset = 0
+        while offset + 8 <= data.count {
+            let size32: UInt32 = data.subdata(in: offset..<offset+4).withUnsafeBytes { ptr in
+                UInt32(bigEndian: ptr.load(as: UInt32.self))
+            }
+            let typeData = data.subdata(in: offset+4..<offset+8)
+            let type = String(data: typeData, encoding: .ascii) ?? ""
+            if type == "moov" { return true }
+            if type == "mdat" { return false }
+
+            let advance: Int
+            if size32 == 1 {
+                guard offset + 16 <= data.count else { return nil }
+                let size64: UInt64 = data.subdata(in: offset+8..<offset+16).withUnsafeBytes { ptr in
+                    UInt64(bigEndian: ptr.load(as: UInt64.self))
+                }
+                advance = Int(size64)
+            } else if size32 >= 8 {
+                advance = Int(size32)
+            } else {
+                return nil
+            }
+            guard advance >= 8 else { return nil }
+            offset += advance
+        }
+        return nil
+    }
+
     public func contentInfo(uniqueID: String) -> SZAVPlayerContentInfo? {
         var info: SZAVPlayerContentInfo?
         dbQueue.inQueue { (db) in

@@ -71,7 +71,6 @@ extension AVPlayerAssetLoader {
         // use cached info first
         if let contentInfo = SZAVPlayerDatabase.shared.contentInfo(uniqueID: self.uniqueID) {
             self.fillInWithLocalData(infoRequest, contentInfo: contentInfo)
-//            print("* informationRequest finish (local))")
             loadingRequest.finishLoading()
 
             return true
@@ -154,7 +153,6 @@ extension AVPlayerAssetLoader {
         let requestedRange = lowerBound..<upperBound
         
         let useCache = true //pendingRequests.isEmpty
-//        print("* dataRequest \(requestedRange) (\(Unmanaged.passUnretained(avDataRequest).toOpaque())) \(useCache ? "" : "DON'T USE CACHE")")
         
         let loader = AVPlayerDataLoader(
             uniqueID: uniqueID,
@@ -319,6 +317,76 @@ fileprivate extension URLResponse {
         return false
     }
 
+}
+
+// MARK: - Prefetch
+
+public final class AVPlayerPrefetchHandle {
+    private let loader: AVPlayerDataLoader
+    fileprivate init(loader: AVPlayerDataLoader) { self.loader = loader }
+    public func cancel() { loader.cancel() }
+}
+
+extension AVPlayerAssetLoader {
+
+    @discardableResult
+    public static func prefetch(
+        url: URL,
+        uniqueID: String,
+        byteCount: Int64,
+        isOwn: Bool,
+        completion: ((Error?) -> Void)? = nil
+    ) -> AVPlayerPrefetchHandle? {
+        guard byteCount > 0 else { return nil }
+        return prefetchRange(url: url, uniqueID: uniqueID, range: 0..<byteCount, isOwn: isOwn, completion: completion)
+    }
+
+    @discardableResult
+    public static func prefetchRange(
+        url: URL,
+        uniqueID: String,
+        range: Range<Int64>,
+        isOwn: Bool,
+        completion: ((Error?) -> Void)? = nil
+    ) -> AVPlayerPrefetchHandle? {
+        guard !range.isEmpty else { return nil }
+
+        let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
+        let upperBound = min(range.upperBound, knownContentLength ?? Int64.max)
+        let needed = range.lowerBound..<upperBound
+        if needed.isEmpty || SZAVPlayerDatabase.shared.hasCachedRange(uniqueID: uniqueID, range: needed) {
+            completion?(nil)
+            return nil
+        }
+
+        let loaderQueue = DispatchQueue(label: "com.SZAVPlayer.prefetchLoaderQueue")
+        let loader = AVPlayerDataLoader(
+            uniqueID: uniqueID,
+            url: url,
+            range: range,
+            callbackQueue: loaderQueue,
+            useCache: true,
+            onFirstResponse: { response in
+                guard SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID) == nil,
+                      let mimeType = response.mimeType else { return }
+                let info = SZAVPlayerContentInfo(
+                    uniqueID: uniqueID,
+                    mimeType: mimeType,
+                    contentLength: response.sz_expectedContentLength,
+                    isByteRangeAccessSupported: response.sz_isByteRangeAccessSupported,
+                    isOwn: isOwn
+                )
+                SZAVPlayerDatabase.shared.update(contentInfo: info)
+            }
+        ) { event in
+            if case .finish(let error) = event {
+                completion?(error)
+            }
+        }
+        let handle = AVPlayerPrefetchHandle(loader: loader)
+        loader.start()
+        return handle
+    }
 }
 
 // MARK: - Getter

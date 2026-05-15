@@ -28,13 +28,16 @@ class AVPlayerDataLoader: NSObject {
     var disposable: Disposable?
     
     private let eventHandler: (AVPlayerDataLoaderEvent) -> Void
-    
+    private let onFirstResponse: ((URLResponse) -> Void)?
+    private var didReceiveFirstResponse: Bool = false
+
     init(
         uniqueID: String,
         url: URL,
         range: SZAVPlayerRange,
         callbackQueue: DispatchQueue,
         useCache: Bool,
+        onFirstResponse: ((URLResponse) -> Void)? = nil,
         eventHandler: @escaping (AVPlayerDataLoaderEvent) -> Void
     ) {
         self.uniqueID = uniqueID
@@ -42,6 +45,7 @@ class AVPlayerDataLoader: NSObject {
         self.requestedRange = range
         self.callbackQueue = callbackQueue
         self.useCache = useCache
+        self.onFirstResponse = onFirstResponse
         self.eventHandler = eventHandler
         super.init()
     }
@@ -165,13 +169,19 @@ extension AVPlayerDataLoader {
     }
 
     func remoteRequestProducer(range: SZAVPlayerRange) -> SignalProducer<Data, Error> {
-//        print("addRemoteRequest \(range)")
         let producer: SignalProducer<Data, Error> = SignalProducer { [url, callbackQueue] observer, lifetime in
             let configuration = URLSessionConfiguration.default
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             let sessionDelegate = URLSessionDataDelegateProxy()
             let session = URLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: nil)
             
+            sessionDelegate.didReceiveResponse = { [weak self, callbackQueue] response in
+                callbackQueue.async {
+                    guard let self, !self.didReceiveFirstResponse else { return }
+                    self.didReceiveFirstResponse = true
+                    self.onFirstResponse?(response)
+                }
+            }
             sessionDelegate.didReceiveData = { [callbackQueue] data in
                 callbackQueue.async {
                     observer.send(value: data)
