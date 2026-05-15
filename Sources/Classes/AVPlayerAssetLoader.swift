@@ -351,13 +351,10 @@ extension AVPlayerAssetLoader {
     ) -> AVPlayerPrefetchHandle? {
         guard !range.isEmpty else { return nil }
 
-        let infos = SZAVPlayerDatabase.shared.localFileInfos(uniqueID: uniqueID)
         let knownContentLength = SZAVPlayerDatabase.shared.contentInfo(uniqueID: uniqueID)?.contentLength
         let upperBound = min(range.upperBound, knownContentLength ?? Int64.max)
         let needed = range.lowerBound..<upperBound
-        if !needed.isEmpty,
-           infos.contains(where: { $0.startOffset <= needed.lowerBound && $0.startOffset + $0.loadedByteLength >= needed.upperBound })
-        {
+        if needed.isEmpty || SZAVPlayerDatabase.shared.hasCachedRange(uniqueID: uniqueID, range: needed) {
             completion?(nil)
             return nil
         }

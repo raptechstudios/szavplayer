@@ -76,18 +76,24 @@ extension SZAVPlayerDatabase {
     }
 
     public func hasCachedPrefix(uniqueID: String, byteLength: Int64) -> Bool {
-        let infos = localFileInfos(uniqueID: uniqueID)
         let knownLength = contentInfo(uniqueID: uniqueID)?.contentLength
         let needed = min(byteLength, knownLength ?? Int64.max)
-        return infos.contains(where: { $0.startOffset == 0 && $0.loadedByteLength >= needed })
+        guard needed > 0 else { return true }
+        return hasCachedRange(uniqueID: uniqueID, range: 0..<needed)
     }
 
     public func hasCachedRange(uniqueID: String, range: Range<Int64>) -> Bool {
         guard !range.isEmpty else { return true }
+        // localFileInfos returns rows ORDER BY startOffset ASC, so walking once is enough
+        // to detect coverage across multiple adjacent or overlapping chunks.
         let infos = localFileInfos(uniqueID: uniqueID)
-        return infos.contains(where: {
-            $0.startOffset <= range.lowerBound && $0.startOffset + $0.loadedByteLength >= range.upperBound
-        })
+        var covered = range.lowerBound
+        for info in infos {
+            guard info.startOffset <= covered else { return false }
+            covered = max(covered, info.startOffset + info.loadedByteLength)
+            if covered >= range.upperBound { return true }
+        }
+        return false
     }
 
     public func isFaststart(uniqueID: String) -> Bool? {
